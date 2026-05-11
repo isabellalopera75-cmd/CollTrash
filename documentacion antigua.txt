@@ -1,219 +1,0 @@
-
-
-
-ESPECIFICACION DE REQUISITOS DE SOFTWARE
-IEEE Std 830-1998
-
-CollTrash
-Sistema de Gestion de Rutas de Recoleccion de Residuos Solidos
-
-
-Competencia: 220501094 — Propuestas Tecnicas de Software
-Sector: Medio Ambiente / Servicios Publicos
-Municipio: Neiva, Huila — Colombia
-Version: 1.0
-Fecha: 27 de abril de 2026
-
-
-CampoDetalleProyectoCollTrash — Gestion de Residuos SolidosTipo de documentoEspecificacion de Requisitos de Software (SRS)EstandarIEEE Std 830-1998EstadoVersion FinalMetodologiaScrum — 4 Sprints de 1 semanaStack principalReact.js / React Native / Node.js / PostgreSQL + PostGIS
-TABLA DE CONTENIDOS
-TABLA DE CONTENIDOS	2
-1. INTRODUCCION	4
-1.1 Proposito	4
-1.2 Ambito del Sistema	4
-1.3 Definiciones, Acronimos y Abreviaturas	4
-1.4 Referencias	5
-1.5 Vision General del Documento	5
-2. DESCRIPCION GENERAL	6
-2.1 Perspectiva del Producto	6
-2.2 Funciones del Producto	6
-2.3 Caracteristicas de los Usuarios	6
-2.4 Restricciones Generales	7
-2.5 Suposiciones y Dependencias	7
-3. REQUISITOS FUNCIONALES	8
-3.1 Modulo de Autenticacion	8
-3.2 Modulo de Configuracion de Rutas Fijas	8
-3.3 Modulo de Gestion Semanal de Rutas	9
-3.4 Modulo del Conductor (App Movil)	9
-3.5 Modulo de Monitoreo en Tiempo Real	11
-3.6 Modulo de Reportes Ciudadanos	11
-3.7 Modulo de Dashboard e Indicadores	12
-4. REQUISITOS NO FUNCIONALES	14
-4.1 Rendimiento	14
-4.2 Disponibilidad y Confiabilidad	14
-4.3 Seguridad	14
-4.4 Usabilidad	15
-4.5 Compatibilidad	15
-4.6 Notificaciones	15
-5. CASOS DE USO PRINCIPALES	16
-CU-01: Configuracion inicial de ruta fija	16
-CU-02: Cambio de conductor por permiso	16
-CU-03: Conductor ejecuta ruta con GPS y descarga	16
-CU-04: Reporte ciudadano y decision del admin	17
-CU-05: Inasistencia e inicio tardio de conductor	17
-6. MODELO DE DATOS	19
-6.1 Descripcion de Tablas	19
-7. REGLAS DE NEGOCIO	21
-8. PLAN DE SPRINTS — JIRA	23
-8.1 Configuracion del Proyecto en Jira	23
-8.2 Sprint 1 — Base + Auth + Configuracion de Rutas	23
-8.3 Sprint 2 — GPS + Jornadas + Asistencia + Cambio Conductor	23
-8.4 Sprint 3 — Reportes Ciudadanos + Dashboard	24
-8.5 Sprint 4 — Dashboard Mensual + Pruebas + Despliegue	24
-APENDICE A: STACK TECNOLOGICO	26
-
-
-
-1. INTRODUCCION
-1.1 Proposito
-El presente documento describe la Especificacion de Requisitos de Software (SRS) del sistema CollTrash, elaborada bajo el estandar IEEE Std 830-1998. Su proposito es definir de forma completa, precisa y verificable todos los requisitos funcionales y no funcionales del sistema, sirviendo como contrato tecnico entre el equipo de desarrollo y los interesados del proyecto.
-Este documento esta dirigido a: desarrolladores del sistema, instructor evaluador de la competencia 220501094, y cualquier parte interesada en el proyecto.
-
-1.2 Ambito del Sistema
-CollTrash es una aplicacion web y movil para la gestion integral de rutas de recoleccion de residuos solidos en el municipio de Neiva, Colombia. El sistema permite:
-• Configurar rutas fijas reutilizables semana a semana con trazado exacto por calles y sectores.
-• Controlar jornadas laborales (manana y tarde) con manejo de inasistencia, inicio tardio y cambio de conductores.
-• Guiar al conductor mediante GPS con navegacion tipo linea azul punto a punto por sectores.
-• Detectar automaticamente la completitud de sectores al recorrer el 90% del trazado.
-• Gestionar descargas en estacion de transferencia con pausa y reanudacion de sector.
-• Atender incidencias de desvio y accidente con flujos diferenciados de respuesta.
-• Recibir reportes ciudadanos autenticados con Google con notificacion por Gmail.
-• Generar dashboard con indicadores diarios, semanales y mensuales con graficas.
-
-1.3 Definiciones, Acronimos y Abreviaturas
-TerminoDefinicionSRSSoftware Requirements Specification — Especificacion de Requisitos de SoftwareGPSGlobal Positioning System — Sistema de posicionamiento globalJWTJSON Web Token — Estandar de autenticacion sin estadoOAuthOpen Authorization — Protocolo de autorizacion para login con terceros (Google)PostGISExtension geoespacial de PostgreSQL para datos de coordenadas y geometriasSectorZona geografica delimitada con un trazado de calles asignado dentro de una rutaRuta fijaConfiguracion permanente de una ruta que se repite semanalmente segun los dias definidosAsignacion semanalInstancia diaria generada automaticamente a partir de una ruta fija para un dia especificoJornadaPeriodo laboral definido por el admin: Manana o Tarde, con hora de inicio y hora limiteInicio tardioSituacion en que el conductor inicia su ruta entre 30 y 60 minutos despues de la hora de inicioNo asistidoSituacion en que el conductor no inicio la ruta antes de la hora limite (1 hora despues del inicio)Cron jobTarea automatica programada en el servidor que se ejecuta en un horario definidoPunto de descargaEstacion de transferencia o relleno sanitario donde el conductor descarga la basura recolectadaRFRequisito FuncionalRNFRequisito No FuncionalRNRegla de NegocioCUCaso de Uso
-1.4 Referencias
-• IEEE Std 830-1998: IEEE Recommended Practice for Software Requirements Specifications.
-• Competencia SENA 220501094: Propuestas Tecnicas de Software.
-• React.js Documentation: https://react.dev
-• React Native Documentation: https://reactnative.dev
-• PostgreSQL + PostGIS Documentation: https://postgis.net
-• Leaflet.js Documentation: https://leafletjs.com
-
-1.5 Vision General del Documento
-El documento esta organizado en 5 secciones principales segun el estandar IEEE 830: Introduccion (seccion 1), Descripcion General (seccion 2), Requisitos Funcionales (seccion 3), Requisitos No Funcionales (seccion 4) y Apendices (seccion 5). Cada requisito funcional incluye identificador unico, descripcion, actor, prioridad y criterios de verificacion.
-
-
-2. DESCRIPCION GENERAL
-2.1 Perspectiva del Producto
-CollTrash es un sistema nuevo, desarrollado desde cero, que no reemplaza un sistema digital existente. Actualmente la empresa de aseo gestiona sus rutas de forma empirica y manual. CollTrash se integrara con los siguientes servicios externos:
-• Google OAuth 2.0 para la autenticacion de ciudadanos.
-• Gmail SMTP (via Nodemailer) para el envio de notificaciones a ciudadanos.
-• OpenStreetMap / Leaflet.js para la visualizacion de mapas y trazado de rutas.
-• Node-cron para la generacion automatica de asignaciones semanales cada domingo a las 11pm.
-
-2.2 Funciones del Producto
-Las funciones principales de CollTrash son:
-1. Configuracion de rutas fijas con trazado por calles y sectores, repeticion semanal y asignacion de conductores.
-2. Gestion de jornadas laborales con control de asistencia, inicio tardio, inasistencia y cambio de conductor.
-3. Navegacion GPS para el conductor con deteccion automatica de completitud de sectores al 90% del trazado.
-4. Gestion de descargas con boton Ir a descargar para pausar el sector y reanudar desde el punto exacto.
-5. Atencion de incidencias de ruta: tramite de ampliacion de tiempo por tranco o reasignacion por accidente.
-6. Monitoreo en tiempo real de todos los vehiculos activos por el administrador.
-7. Recepcion y gestion de reportes ciudadanos con decision del admin y notificacion por Gmail.
-8. Dashboard de indicadores diarios, semanales y mensuales con graficas.
-9. Exportacion de reportes de eficiencia en PDF y Excel.
-
-2.3 Caracteristicas de los Usuarios
-ActorDescripcionNivel tecnicoAccesoAdministradorGestor de la empresa de aseo. Configura rutas, gestiona conductores, monitorea en tiempo real y atiende reportes ciudadanos.Medio — usa computador en oficinaWeb — JWTConductorPiloto del vehiculo recolector. Ejecuta rutas guiado por GPS, reporta incidencias y registra descargas.Basico — usa celular mientras conduceMovil — JWTCiudadanoHabitante del municipio. Reporta puntos criticos de basura y recibe notificaciones sobre su reporte.Basico — usa celular o computadorWeb/Movil — Google OAuth
-2.4 Restricciones Generales
-• El sistema debe funcionar en Android 8.0 o superior para la app movil del conductor.
-• La app movil debe funcionar en modo offline y sincronizar al recuperar conexion en maximo 5 minutos.
-• La autenticacion de ciudadanos se realiza exclusivamente mediante Google OAuth 2.0.
-• Las rutas fijas se generan una vez y se repiten semanalmente. Las modificaciones de trazado son temporales.
-• El cron job de generacion semanal se ejecuta todos los domingos a las 11pm para la semana siguiente.
-• Las rutas operan de lunes a sabado incluyendo festivos, segun la configuracion de dias de cada ruta fija.
-
-2.5 Suposiciones y Dependencias
-• Se asume que la empresa cuenta con dispositivos Android para los conductores con GPS funcional.
-• Se asume disponibilidad de conexion a internet 4G en la mayoria del recorrido, con soporte offline para zonas sin cobertura.
-• El sistema depende de la disponibilidad del servicio de Google OAuth y Gmail SMTP para autenticacion y notificaciones.
-• Se asume que el administrador configurara las rutas fijas antes de la primera semana de operacion.
-
-
-3. REQUISITOS FUNCIONALES
-3.1 Modulo de Autenticacion
-
-IDRequisitoActorPrioridadRF-01El administrador y conductor inician sesion con email y contrasena del sistema. Se genera un token JWT con expiracion de 8 horas.Admin / ConductorAltaRF-02El ciudadano inicia sesion exclusivamente con su cuenta de Google mediante OAuth 2.0. No requiere registro manual previo.CiudadanoAltaRF-03Despues de 5 intentos fallidos consecutivos el sistema bloquea la cuenta por 15 minutos y notifica al usuario.Admin / ConductorMediaRF-04El administrador crea, edita y desactiva cuentas de conductor desde el panel web. El conductor no puede autoregistrarse.AdministradorAltaRF-05Un admin o conductor puede usar su cuenta personal de Google para registrar reportes ciudadanos, pero esta cuenta es independiente de su cuenta del sistema.Admin / ConductorMedia
-3.2 Modulo de Configuracion de Rutas Fijas
-Este modulo se usa al inicio del sistema. Las rutas configuradas aqui se repiten automaticamente semana a semana.
-
-IDRequisitoActorPrioridadRF-06El admin crea una ruta fija asignando: nombre, jornada (manana/tarde), dias de repeticion semanal (ej: lunes/miercoles/viernes), conductor por defecto y vehiculo.AdministradorAltaRF-07El admin traza el recorrido exacto de la ruta sobre el mapa, calle por calle, dividido en sectores. El trazado se muestra como una linea azul (estilo Google Maps).AdministradorAltaRF-08Cada sector tiene un poligono de calles. Al configurar la ruta el admin define el orden de visita de los sectores.AdministradorAltaRF-09Al configurar los dias de repeticion el admin define si el mismo conductor se repite en todos los dias o si varia por dia de la semana.AdministradorAltaRF-10El sistema genera automaticamente las asignaciones semanales cada domingo a las 11pm para todos los dias de la semana siguiente segun las rutas fijas activas.Sistema (cron job)AltaRF-11El admin puede editar el trazado de una ruta fija. Los cambios permanentes aplican desde la semana siguiente. Los cambios temporales aplican solo para los dias indicados sin modificar la ruta fija.AdministradorMediaRF-12El sistema muestra la distancia total estimada del recorrido al configurar o editar una ruta.SistemaMedia
-3.3 Modulo de Gestion Semanal de Rutas
-Permite al admin ver y ajustar las asignaciones de la semana actual: cambiar conductores, gestionar permisos y atender novedades.
-
-IDRequisitoActorPrioridadRF-13El admin ve el calendario semanal con todas las rutas programadas, conductor asignado, jornada y estado de cada asignacion.AdministradorAltaRF-14El admin puede cambiar el conductor de una ruta especifica registrando: conductor reemplazante, motivo del cambio, si es temporal (con fecha de inicio y fin) o permanente.AdministradorAltaRF-15Si el cambio de conductor es temporal, al vencer la fecha de fin el sistema restaura automaticamente el conductor original sin intervencion del admin.SistemaAltaRF-16El sistema valida que el conductor reemplazante no tenga otra ruta asignada en la misma jornada del mismo dia.SistemaAltaRF-17El admin puede añadir un punto temporal a una ruta solo para el dia en que se atiende un reporte ciudadano, siempre en una asignacion que aun no haya iniciado.AdministradorMedia
-3.4 Modulo del Conductor (App Movil)
-
-IDRequisitoActorPrioridadRF-18El conductor ve el listado de sus rutas asignadas para la semana actual con estado, jornada y fecha de cada una.ConductorAltaRF-19El boton de iniciar ruta se habilita a partir de la hora de inicio de la jornada. La ruta se puede iniciar sin demora (estado: normal) o con hasta 30 minutos de retraso (estado: normal).ConductorAltaRF-20Si el conductor inicia entre 30 y 60 minutos despues de la hora de inicio, el sistema registra la ruta como inicio tardio y notifica automaticamente al admin con la hora real de inicio.SistemaAltaRF-21Si el conductor no inicia antes de 60 minutos despues de la hora de inicio, el sistema marca la ruta como no asistido y notifica al admin para que busque un reemplazo.SistemaAltaRF-22Si el conductor llego tarde pero con justificacion valida comunicada al admin por cualquier medio, el admin puede reactivar manualmente el boton de inicio. La ruta se marca igualmente como inicio tardio.AdministradorAltaRF-23Al iniciar la ruta, el GPS muestra el trazado exacto del primer sector como una linea azul de navegacion punto a punto.ConductorAltaRF-24El sistema detecta automaticamente cuando el conductor ha recorrido el 90% del trazado de un sector y lo marca como completado. El conductor avanza automaticamente al siguiente sector.SistemaAltaRF-25Los puntos temporales por reporte ciudadano se muestran en color diferente dentro del sector correspondiente. Se marcan como completados igual que los puntos normales al recorrer el trazado.SistemaMediaRF-26Cuando el conductor necesita ir a descargar presiona el boton Ir a descargar. El sistema pausa el sector en el punto exacto, traza la ruta al punto de descarga mas cercano y registra la salida.ConductorAltaRF-27Si el conductor se desvía mas de 500m del trazado activo SIN presionar el boton Ir a descargar, el sistema le solicita un reporte de incidencia.SistemaAltaRF-28Si el conductor se desvía hacia un punto de descarga sin presionar el boton correspondiente, el sistema lo detecta y le solicita confirmacion de si esta yendo a descargar.SistemaMediaRF-29Al regresar del punto de descarga el conductor presiona Descarga completada. El sistema registra la descarga y reactiva el sector desde el punto exacto donde se pauso.ConductorAltaRF-30El conductor puede finalizar la ruta cuando todos los sectores esten completados. El sistema solicita ingresar el total de toneladas recolectadas (campo obligatorio).ConductorAltaRF-31El conductor puede enviar dos tipos de reporte rapido al admin: (1) Hay trancOn, ampliar tiempo o (2) Tuve un accidente. Ambos requieren descripcion y son obligatorios para el proceso.ConductorAltaRF-32La app funciona en modo offline: guarda coordenadas GPS, marcas de sectores y registros de descarga en IndexedDB. Al recuperar conexion sincroniza en maximo 5 minutos.SistemaAlta
-3.5 Modulo de Monitoreo en Tiempo Real
-
-IDRequisitoActorPrioridadRF-33El admin ve en su dashboard el mapa con todas las rutas activas del dia: trazado de cada ruta, posicion actual de cada vehiculo y estado de cada sector.AdministradorAltaRF-34El mapa actualiza la posicion de cada vehiculo cada 30 segundos mediante Socket.io.SistemaAltaRF-35El admin recibe una notificacion inmediata cuando un conductor envia un reporte de trancOn o accidente.AdministradorAltaRF-36Si el reporte es de trancOn, el admin puede ampliar el tiempo limite de la jornada desde el panel, consumiendo el tiempo de descanso del conductor si es necesario.AdministradorAltaRF-37Si el reporte es de accidente, el admin marca la asignacion del conductor como incompleta con descripcion del motivo, y puede asignar otro conductor disponible para continuar el recorrido desde el punto donde se detuvo.AdministradorAltaRF-38Las rutas marcadas como incompletas se diferencian en el dashboard de las no asistidas y de las completadas normalmente.SistemaAltaRF-39El admin puede ver el historial del recorrido de cada asignacion como una linea sobre el mapa.AdministradorMedia
-3.6 Modulo de Reportes Ciudadanos
-
-IDRequisitoActorPrioridadRF-40El ciudadano se autentica con Google OAuth para acceder al formulario de reporte. No se permiten reportes anonimos.CiudadanoAltaRF-41Al abrir el formulario el sistema solicita obligatoriamente activar la ubicacion GPS. Sin ubicacion no se puede continuar.SistemaAltaRF-42El ciudadano adjunta una foto y escribe una descripcion. Ambos campos son obligatorios junto con la ubicacion GPS.CiudadanoAltaRF-43El admin ve todos los reportes ciudadanos pendientes en su panel con foto, descripcion, ubicacion en mapa y fecha.AdministradorAltaRF-44El admin decide si atender el reporte. Si decide atenderlo: verifica si el punto pertenece a una ruta existente (lo añade como punto temporal en la jornada siguiente disponible) o crea una ruta nueva. Asigna conductor, jornada y horario.AdministradorAltaRF-45Un reporte ciudadano no puede asignarse a una ruta que ya esta en ejecucion. Solo puede asignarse a asignaciones con estado pendiente.SistemaAltaRF-46Si el admin atiende el reporte, el sistema envia automaticamente un Gmail al ciudadano informando que su queja fue recibida y esta en proceso de solucion con el dia estimado de atencion.SistemaAltaRF-47Si el admin decide NO atender el reporte, el sistema envia automaticamente un Gmail al ciudadano con la justificacion de por que no es necesaria la atencion.SistemaAlta
-3.7 Modulo de Dashboard e Indicadores
-
-IDRequisitoActorPrioridadRF-48El dashboard diario muestra: total de rutas programadas, completadas, incompletas (por accidente u otro), no asistidas, con inicio tardio, km recorridos totales y toneladas recolectadas.AdministradorAltaRF-49El dashboard semanal muestra una grafica de barras con el numero de rutas completadas por dia de la semana actual.AdministradorAltaRF-50El dashboard mensual muestra una grafica de linea con la tendencia de toneladas recolectadas por semana del mes.AdministradorAltaRF-51El dashboard mensual muestra una grafica de torta con el porcentaje de cumplimiento por conductor en el mes actual.AdministradorMediaRF-52Los datos del dashboard se actualizan automaticamente sin necesidad de recargar la pagina mediante Socket.io.SistemaMediaRF-53El admin puede exportar el reporte de eficiencia en formato PDF o Excel desde cualquier vista del dashboard.AdministradorBaja
-
-4. REQUISITOS NO FUNCIONALES
-4.1 Rendimiento
-IDRequisitoMetrica de verificacionRNF-01El mapa con rutas activas debe cargar en menos de 3 segundos con conexion 4G.Prueba de carga con herramienta LighthouseRNF-02El dashboard debe cargar en menos de 5 segundos con conexion 4G.Prueba de carga con herramienta LighthouseRNF-03La actualizacion GPS del vehiculo en el mapa del admin debe reflejarse en menos de 35 segundos.Prueba de latencia Socket.ioRNF-04El sistema debe soportar hasta 50 vehiculos enviando datos GPS simultaneamente sin degradacion perceptible.Prueba de carga con k6 o Artillery
-4.2 Disponibilidad y Confiabilidad
-IDRequisitoMetrica de verificacionRNF-05La app movil del conductor debe funcionar completamente sin internet usando IndexedDB y Service Workers.Prueba de funcionamiento en modo avionRNF-06La sincronizacion offline debe completarse en maximo 5 minutos al recuperar la conexion.Prueba de sincronizacion tras desconexion prolongadaRNF-07El cron job de generacion semanal debe ejecutarse todos los domingos a las 11pm sin falla.Monitoreo de logs del servidor
-4.3 Seguridad
-IDRequisitoMetrica de verificacionRNF-08Las contrasenas de admin y conductor se almacenan con hash bcrypt (salt rounds >= 10). Nunca en texto plano.Revision de codigo y base de datosRNF-09Toda comunicacion entre cliente y servidor se realiza mediante HTTPS/TLS.Verificacion de certificado SSLRNF-10Los tokens JWT incluyen: rol del usuario, id, y tiempo de expiracion (8 horas). Las rutas de la API validan el token en cada peticion.Prueba de acceso sin token y con token expiradoRNF-11La autenticacion de ciudadanos usa Google OAuth 2.0. El sistema no almacena contrasenas de ciudadanos.Revision de flujo OAuth y base de datos ciudadanosRNF-12Despues de 5 intentos fallidos de login la cuenta se bloquea 15 minutos.Prueba de fuerza bruta en login
-4.4 Usabilidad
-IDRequisitoMetrica de verificacionRNF-13La interfaz del conductor debe tener botones de al menos 48x48px, legible bajo luz solar directa y operable con una sola mano.Prueba de usuario con conductor realRNF-14Los botones criticos de la app del conductor (Iniciar, Ir a descargar, Trancón, Accidente) deben ser visibles sin necesidad de hacer scroll.Revision de interfaz en dispositivo realRNF-15El tiempo de aprendizaje del sistema para un conductor nuevo no debe superar 30 minutos.Prueba de usuario con conductor sin experiencia previa
-4.5 Compatibilidad
-IDRequisitoMetrica de verificacionRNF-16La app movil debe funcionar en Android 8.0 (API 26) o superior.Prueba en dispositivo o emulador Android 8.0RNF-17La app web debe funcionar correctamente en Chrome, Firefox y Edge (ultimas 2 versiones).Prueba de compatibilidad en los tres navegadoresRNF-18El GPS del sistema debe tener precision minima de 10 metros para la deteccion de sectores y finalizacion de ruta.Prueba de precision GPS en campo
-4.6 Notificaciones
-IDRequisitoMetrica de verificacionRNF-19Los correos Gmail al ciudadano (reporte atendido o rechazado) deben enviarse en maximo 2 minutos tras la decision del admin.Prueba de tiempo de envio con registro de logsRNF-20Los correos deben incluir: nombre del ciudadano, descripcion del reporte, estado de la decision y fecha estimada de atencion si aplica.Revision del contenido del correo enviado
-
-5. CASOS DE USO PRINCIPALES
-CU-01: Configuracion inicial de ruta fija
-Actor principalAdministradorPrecondicionEl admin inicio sesion. Existe al menos un conductor y un vehiculo registrados.Flujo principal1. Accede a Configuracion de Rutas / 2. Presiona Nueva Ruta / 3. Ingresa nombre, jornada y dias de repeticion semanal / 4. Selecciona conductor por defecto y vehiculo / 5. Traza el recorrido calle por calle en el mapa dividiendo por sectores / 6. Define si el conductor se repite en todos los dias o varia / 7. Guarda / 8. El sistema genera las asignaciones de la semana actualFlujo alternativoSi el conductor ya tiene ruta en esa jornada ese dia, el sistema muestra advertencia y bloquea el guardado.PostcondicionLa ruta queda configurada y las asignaciones semanales se generan automaticamente cada domingo a las 11pm.
-CU-02: Cambio de conductor por permiso
-Actor principalAdministradorPrecondicionExiste una ruta asignada. El conductor titular solicito permiso.Flujo principal1. Admin accede a Gestion Semanal / 2. Selecciona la ruta y el dia afectado / 3. Presiona Cambiar conductor / 4. Selecciona el conductor reemplazante / 5. Registra el motivo / 6. Indica si es temporal (con fecha de fin) o permanente / 7. GuardaFlujo alternativo ASi el reemplazante ya tiene ruta en esa jornada, el sistema muestra advertencia y no permite guardar.Postcondicion temporalEl reemplazante queda asignado por los dias indicados. Al vencer la fecha, el sistema restaura el conductor original automaticamente.Postcondicion permanenteEl nuevo conductor queda asignado definitivamente a esa ruta.
-CU-03: Conductor ejecuta ruta con GPS y descarga
-Actor principalConductorPrecondicionEl conductor tiene sesion activa, la ruta del dia esta en estado pendiente y es la hora de su jornada.Flujo principal1. Abre la app y ve su ruta del dia / 2. Presiona Iniciar ruta / 3. El GPS muestra la linea azul del primer sector / 4. El sistema envia coordenadas cada 30 segundos / 5. Al recorrer el 90% del sector, se marca completado automaticamente y avanza al siguiente / 6. Cuando el camion se llena, el conductor presiona Ir a descargar / 7. El sistema pausa el sector y traza ruta al punto de descarga / 8. Al regresar presiona Descarga completada y el sector se reactiva / 9. Al completar todos los sectores se habilita Finalizar ruta / 10. El conductor ingresa toneladas recolectadasFlujo alternativo ASin internet: datos GPS y marcas se guardan en IndexedDB y sincronizan al reconectar.Flujo alternativo BSi el conductor envia reporte de trancOn, el admin puede ampliar el tiempo limite.Flujo alternativo CSi el conductor envia reporte de accidente, el admin marca la ruta como incompleta y asigna otro conductor.PostcondicionLa ruta queda completada o incompleta con todos los indicadores registrados (km, tiempo, toneladas, sectores).
-CU-04: Reporte ciudadano y decision del admin
-Actor principalCiudadano / AdministradorPrecondicionEl ciudadano esta autenticado con Google OAuth.Flujo principal1. Ciudadano accede al portal CollTrash / 2. El sistema solicita activar GPS / 3. El ciudadano toma foto y escribe descripcion / 4. Envia el reporte / 5. El admin ve el reporte con mapa, foto y descripcion en su panelFlujo A — AtenderEl admin verifica si el punto ya pertenece a una ruta existente. Si si, lo añade como punto temporal a la jornada siguiente disponible. Si no, crea una ruta nueva. Asigna conductor y horario. El sistema envia Gmail al ciudadano.Flujo B — No atenderEl sistema envia automaticamente un Gmail al ciudadano con la justificacion.RestriccionNo se puede asignar el reporte a una ruta que ya este en ejecucion.PostcondicionEl ciudadano queda notificado por Gmail y el reporte queda con estado actualizado.
-CU-05: Inasistencia e inicio tardio de conductor
-Actor principalSistema (automatico) / AdministradorPrecondicionExiste una asignacion pendiente para el dia. Llega la hora de inicio de jornada.Flujo A — NormalEl conductor inicia dentro de los primeros 30 minutos. La ruta queda en estado activa normal.Flujo B — Inicio tardioEl conductor inicia entre 30 y 60 minutos despues de la hora de inicio. El sistema registra inicio tardio y notifica al admin con la hora real.Flujo C — Tardio con justificacionEl conductor envia justificacion al admin por cualquier medio. El admin reactiva manualmente el boton. La ruta se marca como inicio tardio al iniciar.Flujo D — No asistidoPasan 60 minutos sin que el conductor inicie y sin justificacion valida. El sistema marca la asignacion como no asistido y notifica al admin para buscar reemplazo.PostcondicionLa asignacion queda con el estado correspondiente visible en el dashboard del admin.
-
-6. MODELO DE DATOS
-6.1 Descripcion de Tablas
-
-TablaDescripcionCampos PrincipalesusuariosAdministradores y conductores del sistema (login con email/contrasena)id, nombre, email, password_hash, rol, activo, created_atciudadanosCiudadanos autenticados con Google OAuth (tabla separada de usuarios)id, nombre, email, google_id, foto_perfil, created_atvehiculosVehiculos recolectores de la empresaid, placa, modelo, capacidad_ton, activojornadasJornadas laborales configuradas por el adminid, nombre (manana/tarde), hora_inicio, hora_limite_fin, margen_tardio_min (default: 30), margen_no_asistido_min (default: 60)rutas_fijasRutas permanentes configuradas al inicio del sistemaid, nombre, jornada_id, dias_semana[], conductor_default_id, vehiculo_id, activosectores_rutaSectores de cada ruta fija con trazado de calles como geometriaid, ruta_fija_id, orden, nombre, trazado_geom (PostGIS LineString), porcentaje_completitud_requerido (default: 90)asignaciones_semanalesInstancias diarias generadas por el cron job dominicalid, ruta_fija_id, fecha, conductor_id, vehiculo_id, estado (pendiente/activa/completada/incompleta/no_asistido), tipo_cierre (normal/accidente/otro), inicio_tardio (bool), hora_inicio_real, hora_fin_realsectores_asignacionEstado de cada sector dentro de una asignacion especificaid, asignacion_id, sector_id, estado (pendiente/en_progreso/completado), completado_at, porcentaje_recorridocambios_conductorHistorial de cambios de conductor con motivo y duracionid, ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, es_permanentepuntos_temporalesPuntos añadidos a una asignacion por reporte ciudadanoid, asignacion_id, sector_id, latitud, longitud, nombre_descripcion, visitado, motivorastreo_gpsHistorial de coordenadas GPS durante la ejecucion de la rutaid, asignacion_id, latitud, longitud, timestamp, sincronizadodescargasRegistros de cada descarga realizada durante una asignacionid, asignacion_id, sector_pausa_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng, hora_salida, hora_regresoincidencias_conductorReportes enviados por conductores al admin durante la rutaid, asignacion_id, conductor_id, tipo (trancon/accidente), descripcion, timestamp, resueltoreportes_ciudadanosReportes de puntos criticos enviados por ciudadanosid, ciudadano_id, latitud, longitud, descripcion, foto_url, estado (pendiente/en_proceso/atendido/rechazado), asignacion_id, created_at, atendido_ateficiencia_rutasIndicadores calculados al cerrar cada asignacionid, asignacion_id, km_recorridos, toneladas, tiempo_minutos, sectores_completados, sectores_totales, porcentaje_cumplimiento, num_descargas
-
-7. REGLAS DE NEGOCIO
-
-IDReglaRN-01Existen dos jornadas: Manana y Tarde. El admin define la hora de inicio y hora limite de cada jornada al configurar el sistema.RN-02Un conductor puede tener maximo 2 rutas por dia, una por jornada. No puede tener 2 rutas en la misma jornada.RN-03Una ruta tiene exactamente 1 conductor asignado. No puede haber multiples conductores en la misma ruta simultaneamente.RN-04Las rutas son fijas y se configuran al inicio. Se repiten semanalmente de lunes a sabado incluyendo festivos.RN-05El cron job se ejecuta cada domingo a las 11pm y genera todas las asignaciones de la semana siguiente.RN-06Un sector se marca como completado automaticamente cuando el GPS detecta que el conductor recorrio el 90% del trazado definido.RN-07El conductor tiene 30 minutos desde la hora de inicio para iniciar la ruta sin penalizacion. Entre 30 y 60 minutos se registra como inicio tardio. Despues de 60 minutos sin inicio: no asistido.RN-08Si el conductor tiene justificacion valida comunicada al admin, el admin puede reactivar el boton de inicio. La ruta se marca como inicio tardio de todas formas.RN-09Al presionar Ir a descargar, el sistema pausa el sector en el punto exacto y no detecta el desvio hacia el punto de descarga como incidencia.RN-10Si el conductor se desvía mas de 500m del trazado activo sin presionar Ir a descargar, el sistema solicita un reporte de incidencia.RN-11Si el sistema detecta que el conductor se dirige a un punto de descarga sin presionar el boton, le solicita confirmacion antes de activar el modo descarga.RN-12Un reporte ciudadano no puede asignarse a una ruta que ya este en ejecucion (estado activa). Solo a asignaciones pendientes.RN-13El admin puede añadir el punto del reporte ciudadano a la jornada siguiente mas proxima disponible, no a la jornada en curso.RN-14Al vencer la fecha de fin de un cambio temporal de conductor, el sistema restaura automaticamente el conductor original sin intervencion del admin.RN-15Las rutas incompletas por accidente u otro motivo se registran con descripcion del motivo y se diferencian de las no asistidas en el dashboard.RN-16El porcentaje de cumplimiento se calcula como: (sectores completados / sectores totales) x 100.RN-17El ciudadano debe autenticarse con Google OAuth. No se permiten reportes anonimos.RN-18El reporte ciudadano requiere obligatoriamente ubicacion GPS, foto y descripcion. Sin estos tres datos no se puede enviar.RN-19El sistema notifica al ciudadano por Gmail en ambos casos: reporte atendido (con dia estimado de atencion) o rechazado (con justificacion).
-
-8. PLAN DE SPRINTS — JIRA
-8.1 Configuracion del Proyecto en Jira
-• Tipo de proyecto: Software (Scrum)
-• Nombre: CollTrash — GRS Neiva  |  Clave: GRS
-• Roles: Product Owner (Instructor), Scrum Master (lider), Developer (aprendiz)
-• Duracion de sprint: 1 semana
-• Columnas Kanban: Backlog ? To Do ? In Progress ? Code Review ? Testing ? Done
-
-8.2 Sprint 1 — Base + Auth + Configuracion de Rutas
-IDHistoria / TareaPtsTipoGRS-01Configurar BD PostgreSQL + PostGIS + estructura del proyecto Node.js3TareaGRS-02Login admin y conductor con JWT + bloqueo por intentos fallidos3HistoriaGRS-03Login ciudadano con Google OAuth 2.03HistoriaGRS-04Registro y gestion de conductores por parte del admin3HistoriaGRS-05Configuracion de ruta fija con trazado por sectores, dias de repeticion y conductor8HistoriaGRS-06Visualizar trazado de ruta fija en mapa (linea azul + sectores)8HistoriaGRS-07Cron job dominical: generacion automatica de asignaciones semanales5Historia
-8.3 Sprint 2 — GPS + Jornadas + Asistencia + Cambio Conductor
-IDHistoria / TareaPtsTipoGRS-08Conductor ve rutas de la semana + boton de inicio segun jornada y hora5HistoriaGRS-09Control de inasistencia y inicio tardio con notificacion al admin5HistoriaGRS-10GPS guia al conductor con linea azul + deteccion automatica de sectores al 90%8HistoriaGRS-11Boton Ir a descargar: pausa sector, traza ruta a descarga, reactiva al regresar8HistoriaGRS-12Monitoreo GPS en tiempo real en el panel del admin con todas las rutas activas8HistoriaGRS-13Reporte de incidencia rapido: trancOn y accidente con flujos diferenciados5HistoriaGRS-14Cambio de conductor: temporal o permanente con registro de motivo y restauracion automatica5HistoriaGRS-15Modo offline + sincronizacion automatica8Historia
-8.4 Sprint 3 — Reportes Ciudadanos + Dashboard
-IDHistoria / TareaPtsTipoGRS-16Formulario de reporte ciudadano con GPS obligatorio, foto y descripcion5HistoriaGRS-17Admin ve reportes ciudadanos en mapa con foto, descripcion y estado5HistoriaGRS-18Admin atiende reporte: asigna punto temporal a ruta pendiente + Gmail al ciudadano8HistoriaGRS-19Admin rechaza reporte: Gmail automatico con justificacion al ciudadano3HistoriaGRS-20Dashboard diario: rutas, km, toneladas, inicio tardio, no asistidos, incompletas8HistoriaGRS-21Dashboard semanal con grafica de barras5Historia
-8.5 Sprint 4 — Dashboard Mensual + Pruebas + Despliegue
-IDHistoria / TareaPtsTipoGRS-22Dashboard mensual con grafica de linea y torta por conductor5HistoriaGRS-23Exportar reportes de eficiencia en PDF y Excel5HistoriaGRS-24Restauracion automatica de conductor original al vencer periodo temporal3HistoriaGRS-25Pruebas de integracion de todos los flujos principales5TareaGRS-26Despliegue en servidor de pruebas y documentacion final3Tarea
-
-APENDICE A: STACK TECNOLOGICO
-
-CapaTecnologiaVersion recomendadaJustificacionFrontend WebReact.js React 18+SPA moderna, soporte de mapas, dashboard con graficasApp MovilReact Native0.73+GPS nativo, modo offline con IndexedDB, comparte logica con webBackend / APINode.js + Express.jsNode 20 LTSLigero, ideal para WebSockets y JWTBase de DatosPostgreSQL + PostGISPostgreSQL 15+Extension geoespacial para trazados de rutas y coordenadasMapasLeaflet.js + OpenStreetMapLeaflet 1.9+Gratuito, sin limite de uso, soporte de geometrias PostGISAutenticacionJWT + Google OAuth 2.0passport-google-oauth20JWT para admin/conductor, OAuth para ciudadanosTiempo RealSocket.io4.xGPS en vivo y notificaciones de incidencias al adminOfflineIndexedDB + Service Workersnativa del navegadorAlmacenamiento local para modo sin internetEmailNodemailer + Gmail SMTPNodemailer 6+Notificaciones a ciudadanos por GmailGraficasChart.js4.xGraficas de barras, linea y torta para el dashboardTareas programadasnode-cron3.xCron job dominical para generacion de asignacionesControl VersionesGit + GitHubGit 2.xControl de versiones y colaboracionGestion ProyectoJira + ScrumCloudTablero Kanban y gestion de sprints
-
-CollTrash — Especificacion de Requisitos de Software — IEEE Std 830-1998 — Version 1.0
-CollTrash — Especificacion de Requisitos de Software (IEEE 830)	v1.0
-
-Pagina 2 de 26
-
