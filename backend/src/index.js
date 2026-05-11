@@ -8,13 +8,18 @@ const { iniciarSocket } = require('./config/socket');
 require('dotenv').config();
 
 const { verificarToken, soloAdmin } = require('./middlewares/authMiddleware');
-const { generarAsignacionesSemanales } = require('./services/cronService');
+const { generarAsignaciones } = require('./services/cronService');
 
 const authRoutes = require('./routes/authRoutes');
 const rutasRoutes = require('./routes/rutasRoutes');
 const conductorRoutes = require('./routes/conductorRoutes');
 const reportesRoutes = require('./routes/reportesRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const barriosRoutes = require('./routes/barriosRoutes');
+const asignacionesRoutes = require('./routes/asignacionesRoutes');
+const puntosDescargaRoutes = require('./routes/puntosDescargaRoutes');
+const incidenciasRoutes = require('./routes/incidenciasRoutes');
+const configRoutes = require('./routes/configRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,10 +37,20 @@ app.use('/api/rutas', rutasRoutes);
 app.use('/api/conductor', conductorRoutes);
 app.use('/api/reportes', reportesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/barrios', barriosRoutes);
+app.use('/api/asignaciones', asignacionesRoutes);
+app.use('/api/puntos-descarga', puntosDescargaRoutes);
+app.use('/api/incidencias', incidenciasRoutes);
+app.use('/api/config', configRoutes);
 
+// Endpoint temporal para probar la generación de la semana (Solo para Admin)
 app.post('/api/test/generar-asignaciones', verificarToken, soloAdmin, async (req, res) => {
-  await generarAsignacionesSemanales();
-  res.json({ mensaje: 'Asignaciones generadas manualmente.' });
+  try {
+    await generarAsignaciones();
+    res.json({ mensaje: 'Asignaciones de la próxima semana generadas correctamente' });
+  } catch (e) {
+    res.status(500).json({ mensaje: 'Error al generar' });
+  }
 });
 
 app.get('/', (req, res) => {

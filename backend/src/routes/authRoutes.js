@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { login, registrarConductor, obtenerPerfil } = require('../controllers/authController');
+const { login, registrarConductor, editarConductor, obtenerPerfil } = require('../controllers/authController');
 const { verificarToken, soloAdmin } = require('../middlewares/authMiddleware');
 const passport = require('../config/passport');
 const jwt = require('jsonwebtoken');
@@ -11,6 +11,9 @@ router.post('/login', login);
 
 // POST /api/auth/registrar-conductor (solo admin)
 router.post('/registrar-conductor', verificarToken, soloAdmin, registrarConductor);
+
+// PUT /api/auth/conductor/:id (solo admin)
+router.put('/conductor/:id', verificarToken, soloAdmin, editarConductor);
 
 // GET /api/auth/perfil
 router.get('/perfil', verificarToken, obtenerPerfil);
@@ -29,7 +32,12 @@ router.get('/google/callback',
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
-    res.json({ mensaje: 'Login con Google exitoso.', token, ciudadano: req.user });
+    
+    // Redirigimos al frontend con el token
+    // Si tienes un nuevo link de localhost.run, ponlo aquí abajo:
+    const frontendURL = 'http://localhost:3001/portal'; 
+      
+    res.redirect(`${frontendURL}?token=${token}`);
   }
 );
 
@@ -37,7 +45,7 @@ router.get('/google/callback',
 router.get('/conductores', verificarToken, soloAdmin, async (req, res) => {
   const pool = require('../config/database');
   const resultado = await pool.query(
-    "SELECT id, nombre, email, activo FROM usuarios WHERE rol = 'conductor' ORDER BY nombre ASC"
+    "SELECT id, nombre, email, cedula, telefono, activo FROM usuarios WHERE rol = 'conductor' ORDER BY nombre ASC"
   );
   res.json({ conductores: resultado.rows });
 });

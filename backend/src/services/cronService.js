@@ -1,105 +1,57 @@
-const cron = require('node-cron');
 const pool = require('../config/database');
+const cron = require('node-cron');
 
-// Función que genera las asignaciones de la semana siguiente
-const generarAsignacionesSemanales = async () => {
-  console.log('⚙️ Ejecutando cron job: generando asignaciones semanales...');
-
+const generarAsignaciones = async (fechaInicio = null) => {
+  console.log('🕒 Iniciando generación de asignaciones...');
+  
   try {
-    // Obtener todas las rutas fijas activas
-    const rutas = await pool.query(
-      'SELECT * FROM rutas_fijas WHERE activo = TRUE'
-    );
-
-    if (rutas.rows.length === 0) {
-      console.log('No hay rutas fijas activas.');
-      return;
-    }
-
-    const diasSemana = {
-      'lunes': 1, 'martes': 2, 'miercoles': 3,
-      'jueves': 4, 'viernes': 5, 'sabado': 6
-    };
-
-    let totalGeneradas = 0;
-
-    for (const ruta of rutas.rows) {
-      const dias = ruta.dias_semana.split(',').map(d => d.trim());
-
-      for (const dia of dias) {
-        const numeroDia = diasSemana[dia];
-        if (!numeroDia) continue;
-
-        // Calcular la fecha del día de la próxima semana
-        const hoy = new Date();
-        const proximoLunes = new Date(hoy);
-        proximoLunes.setDate(hoy.getDate() + (8 - hoy.getDay()));
-
-        const fecha = new Date(proximoLunes);
-        fecha.setDate(proximoLunes.getDate() + (numeroDia - 1));
-        const fechaStr = fecha.toISOString().split('T')[0];
-
-        // Verificar si ya existe la asignación para ese día
-        const existe = await pool.query(
-          'SELECT id FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND fecha = $2',
-          [ruta.id, fechaStr]
-        );
-
-        if (existe.rows.length > 0) continue;
-
-        // Verificar si hay cambio de conductor para esa fecha
-        const cambio = await pool.query(
-          `SELECT conductor_reemplazante_id FROM cambios_conductor 
-           WHERE ruta_fija_id = $1 
-           AND fecha_inicio <= $2 
-           AND (fecha_fin >= $2 OR es_permanente = TRUE)
-           ORDER BY created_at DESC LIMIT 1`,
-          [ruta.id, fechaStr]
-        );
-
-        const conductorId = cambio.rows.length > 0
-          ? cambio.rows[0].conductor_reemplazante_id
-          : ruta.conductor_default_id;
-
-        // Crear la asignación
-        const asignacion = await pool.query(
-          `INSERT INTO asignaciones_semanales 
-           (ruta_fija_id, fecha, conductor_id, vehiculo_id, estado)
-           VALUES ($1, $2, $3, $4, 'pendiente') RETURNING id`,
-          [ruta.id, fechaStr, conductorId, ruta.vehiculo_id]
-        );
-
-        // Crear sectores_asignacion para cada sector de la ruta
-        const sectores = await pool.query(
-          'SELECT id FROM sectores_ruta WHERE ruta_fija_id = $1 ORDER BY orden ASC',
-          [ruta.id]
-        );
-
-        for (const sector of sectores.rows) {
-          await pool.query(
-            `INSERT INTO sectores_asignacion (asignacion_id, sector_id, estado)
-             VALUES ($1, $2, 'pendiente')`,
-            [asignacion.rows[0].id, sector.id]
+    const rutasFijas = await pool.query('SELECT * FROM rutas_fijas WHERE activo = TRUE');
+    
+    // Si no se pasa fecha, empezamos desde HOY para cubrir lo que queda de semana
+    let fechaBase = fechaInicio ? new Date(fechaInicio) : new Date();
+    
+    // Generar para los próximos 7 días a partir de la fecha base
+    for (let i = 0; i < 7; i++) {
+      const fechaAsignacion = new Date(fechaBase);
+      fechaAsignacion.setDate(fechaBase.getDate() + i);
+      
+      // Resetear horas para comparar solo fechas
+      fechaAsignacion.setHours(0,0,0,0);
+      
+      const diaSemanaNombre = fechaAsignacion.toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+      
+      for (const ruta of rutasFijas.rows) {
+        if (ruta.dias_semana.toLowerCase().includes(diaSemanaNombre)) {
+          
+          // Verificar si ya existe para evitar duplicados
+          const existe = await pool.query(
+            'SELECT id FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND fecha = $2',
+            [ruta.id, fechaAsignacion]
           );
-        }
 
-        totalGeneradas++;
+          if (existe.rows.length === 0) {
+            await pool.query(
+              `INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
+               VALUES ($1, $2, $3, $4, 'pendiente')`,
+              [ruta.id, ruta.conductor_default_id, ruta.vehiculo_id, fechaAsignacion]
+            );
+          }
+        }
       }
     }
-
-    console.log(`✅ Cron job completado: ${totalGeneradas} asignaciones generadas.`);
-
+    
+    console.log('🚀 Asignaciones generadas/actualizadas con éxito.');
   } catch (error) {
-    console.error('❌ Error en cron job:', error.message);
+    console.error('❌ Error en el generador:', error.message);
   }
 };
 
-// Ejecutar cada domingo a las 11pm
+// Domingo 11 PM: Genera la PRÓXIMA semana
 cron.schedule('0 23 * * 0', () => {
-  generarAsignacionesSemanales();
-}, {
-  timezone: 'America/Bogota'
+  const hoy = new Date();
+  const lunesProx = new Date(hoy);
+  lunesProx.setDate(hoy.getDate() + ((1 + 7 - hoy.getDay()) % 7 || 7));
+  generarAsignaciones(lunesProx);
 });
 
-// Exportar la función para poder ejecutarla manualmente si se necesita
-module.exports = { generarAsignacionesSemanales };
+module.exports = { generarAsignaciones };

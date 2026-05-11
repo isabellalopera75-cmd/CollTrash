@@ -28,7 +28,34 @@ const crearRutaFija = async (req, res) => {
       return res.status(400).json({ mensaje: 'El vehículo no existe o no está activo.' });
     }
 
-    // Crear la ruta fija
+    // NUEVA VALIDACIÓN: REGLA DE ORO (No repetir jornada/día para Conductor o Vehículo)
+    const diasNuevos = dias_semana.split(',');
+
+    const rutasExistentes = await pool.query(
+      `SELECT nombre, dias_semana, conductor_default_id, vehiculo_id
+       FROM rutas_fijas 
+       WHERE (conductor_default_id = $1 OR vehiculo_id = $2)
+       AND jornada_id = $3
+       AND activo = TRUE`,
+      [conductor_default_id, vehiculo_id, jornada_id]
+    );
+
+    for (const ruta of rutasExistentes.rows) {
+      const diasOcupados = ruta.dias_semana.split(',');
+      const coincidencia = diasNuevos.filter(dia => diasOcupados.includes(dia));
+
+      if (coincidencia.length > 0) {
+        const esConductor = ruta.conductor_default_id == conductor_default_id;
+        const sujeto = esConductor ? `El conductor` : `El vehículo`;
+        const razon = esConductor ? `ya tiene asignada la ruta "${ruta.nombre}"` : `ya está siendo usado en la ruta "${ruta.nombre}"`;
+        
+        return res.status(400).json({ 
+          mensaje: `❌ Error de Logística: ${sujeto} ${razon} para los días: [${coincidencia.join(', ')}] en la jornada seleccionada.` 
+        });
+      }
+    }
+
+    // Guardar la ruta principal
     const resultado = await pool.query(
       `INSERT INTO rutas_fijas (nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -73,7 +100,6 @@ const obtenerRutasFijas = async (req, res) => {
        JOIN usuarios u ON u.id = rf.conductor_default_id
        JOIN vehiculos v ON v.id = rf.vehiculo_id
        JOIN jornadas j ON j.id = rf.jornada_id
-       WHERE rf.activo = TRUE
        ORDER BY rf.created_at DESC`
     );
 
@@ -129,23 +155,62 @@ const obtenerRutaFijaPorId = async (req, res) => {
 // Editar ruta fija
 const editarRutaFija = async (req, res) => {
   const { id } = req.params;
-  const { nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana } = req.body;
+  const { nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana, activo, sectores } = req.body;
 
   try {
+    // Validar disponibilidad antes de actualizar
+    const rutaActual = await pool.query('SELECT * FROM rutas_fijas WHERE id = $1', [id]);
+    if (rutaActual.rows.length > 0) {
+      const r = rutaActual.rows[0];
+      const c_id = conductor_default_id || r.conductor_default_id;
+      const v_id = vehiculo_id || r.vehiculo_id;
+      const j_id = jornada_id || r.jornada_id;
+      const d_sem = dias_semana || r.dias_semana;
+      
+      const rExistentes = await pool.query(
+        `SELECT nombre, dias_semana FROM rutas_fijas 
+         WHERE (conductor_default_id = $1 OR vehiculo_id = $2)
+         AND jornada_id = $3 AND activo = TRUE AND id != $4`,
+        [c_id, v_id, j_id, id]
+      );
+
+      for (const rx of rExistentes.rows) {
+        const dN = d_sem.split(',');
+        const dO = rx.dias_semana.split(',');
+        const coincidencia = dN.filter(dia => dO.includes(dia));
+        if (coincidencia.length > 0) {
+          return res.status(400).json({ 
+            mensaje: `❌ Conflicto: El conductor o vehículo ya tienen la ruta "${rx.nombre}" en los días [${coincidencia.join(', ')}]` 
+          });
+        }
+      }
+    }
+
     const resultado = await pool.query(
       `UPDATE rutas_fijas 
        SET nombre = COALESCE($1, nombre),
            jornada_id = COALESCE($2, jornada_id),
            conductor_default_id = COALESCE($3, conductor_default_id),
            vehiculo_id = COALESCE($4, vehiculo_id),
-           dias_semana = COALESCE($5, dias_semana)
-       WHERE id = $6 AND activo = TRUE
+           dias_semana = COALESCE($5, dias_semana),
+           activo = COALESCE($6, activo)
+       WHERE id = $7
        RETURNING *`,
-      [nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana, id]
+      [nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana, activo, id]
     );
 
     if (resultado.rows.length === 0) {
       return res.status(404).json({ mensaje: 'Ruta no encontrada.' });
+    }
+
+    // Si vienen sectores, actualizamos el primero (suponiendo 1 sector por ruta por ahora)
+    if (sectores && sectores.length > 0) {
+      const sector = sectores[0];
+      await pool.query(
+        `UPDATE sectores_ruta SET trazado_geom = $1, nombre = $2 
+         WHERE ruta_fija_id = $3`,
+        [sector.trazado_geom, sector.nombre, id]
+      );
     }
 
     res.status(200).json({
@@ -181,10 +246,190 @@ const eliminarRutaFija = async (req, res) => {
   }
 };
 
+// Obtener vehículos activos
+const obtenerVehiculos = async (req, res) => {
+  try {
+    const resultado = await pool.query('SELECT id, placa, modelo, capacidad_ton FROM vehiculos WHERE activo = TRUE');
+    res.status(200).json({ vehiculos: resultado.rows });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener vehículos' });
+  }
+};
+
+// Obtener jornadas
+const obtenerJornadas = async (req, res) => {
+  try {
+    const resultado = await pool.query('SELECT id, nombre, hora_inicio, hora_limite_fin FROM jornadas');
+    res.status(200).json({ jornadas: resultado.rows });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener jornadas' });
+  }
+};
+
+// Crear vehículo
+const crearVehiculo = async (req, res) => {
+  const { placa, modelo, capacidad_ton } = req.body;
+  
+  // Validar placa (Formato AAA-123)
+  const regexPlaca = /^[A-Z]{3}-[0-9]{3}$/;
+  if (!placa || !regexPlaca.test(placa.toUpperCase())) {
+    return res.status(400).json({ mensaje: 'La placa debe tener el formato AAA-123 (3 letras, guión y 3 números).' });
+  }
+
+  // Validar capacidad
+  const cap = parseFloat(capacidad_ton);
+  if (isNaN(cap) || cap <= 0) {
+    return res.status(400).json({ mensaje: 'La capacidad debe ser un número mayor a 0.' });
+  }
+
+  try {
+    const resultado = await pool.query(
+      'INSERT INTO vehiculos (placa, modelo, capacidad_ton) VALUES ($1, $2, $3) RETURNING *',
+      [placa.toUpperCase(), modelo, cap]
+    );
+    res.status(201).json({ mensaje: 'Vehículo registrado', vehiculo: resultado.rows[0] });
+  } catch (error) {
+    console.error('Error DB:', error);
+    res.status(500).json({ mensaje: 'Error al registrar vehículo' });
+  }
+};
+
+// Editar vehículo
+const editarVehiculo = async (req, res) => {
+  const { id } = req.params;
+  const { placa, modelo, capacidad_ton } = req.body;
+
+  // Validaciones si vienen los campos
+  if (placa) {
+    const regexPlaca = /^[A-Z]{3}-[0-9]{3}$/;
+    if (!regexPlaca.test(placa.toUpperCase())) {
+      return res.status(400).json({ mensaje: 'La placa debe tener el formato AAA-123.' });
+    }
+  }
+
+  if (capacidad_ton !== undefined) {
+    const cap = parseFloat(capacidad_ton);
+    if (isNaN(cap) || cap <= 0) {
+      return res.status(400).json({ mensaje: 'La capacidad debe ser un número mayor a 0.' });
+    }
+  }
+
+  try {
+    const resultado = await pool.query(
+      `UPDATE vehiculos 
+       SET placa = COALESCE($1, placa),
+           modelo = COALESCE($2, modelo),
+           capacidad_ton = COALESCE($3, capacidad_ton)
+       WHERE id = $4 RETURNING *`,
+      [placa ? placa.toUpperCase() : null, modelo, capacidad_ton, id]
+    );
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Vehículo no encontrado' });
+    }
+    res.json({ mensaje: 'Vehículo actualizado', vehiculo: resultado.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al editar vehículo' });
+  }
+};
+
+// Helper: verifica si un rango de horas se solapa con jornadas existentes
+const verificarSolapaJornada = async (hora_inicio, hora_limite_fin, excluirId = null) => {
+  const query = `
+    SELECT id, nombre, hora_inicio, hora_limite_fin 
+    FROM jornadas
+    WHERE id != COALESCE($3, -1)
+      AND (
+        -- La nueva jornada comienza dentro de una existente
+        ($1 >= hora_inicio AND $1 < hora_limite_fin)
+        OR
+        -- La nueva jornada termina dentro de una existente
+        ($2 > hora_inicio AND $2 <= hora_limite_fin)
+        OR
+        -- La nueva jornada envuelve completamente una existente
+        ($1 <= hora_inicio AND $2 >= hora_limite_fin)
+      )
+  `;
+  const resultado = await pool.query(query, [hora_inicio, hora_limite_fin, excluirId]);
+  return resultado.rows;
+};
+
+// Crear jornada
+const crearJornada = async (req, res) => {
+  const { nombre, hora_inicio, hora_limite_fin } = req.body;
+  if (!nombre || !hora_inicio || !hora_limite_fin) {
+    return res.status(400).json({ mensaje: 'Todos los campos son obligatorios.' });
+  }
+  if (hora_inicio >= hora_limite_fin) {
+    return res.status(400).json({ mensaje: 'La hora de inicio debe ser anterior a la hora de fin.' });
+  }
+  try {
+    const solapas = await verificarSolapaJornada(hora_inicio, hora_limite_fin);
+    if (solapas.length > 0) {
+      return res.status(409).json({
+        mensaje: `El horario se solapa con la jornada existente "${solapas[0].nombre}" (${solapas[0].hora_inicio} - ${solapas[0].hora_limite_fin}). Ajusta las horas para que no se crucen.`
+      });
+    }
+    const resultado = await pool.query(
+      'INSERT INTO jornadas (nombre, hora_inicio, hora_limite_fin) VALUES ($1, $2, $3) RETURNING *',
+      [nombre, hora_inicio, hora_limite_fin]
+    );
+    res.status(201).json({ mensaje: 'Jornada creada', jornada: resultado.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al crear jornada' });
+  }
+};
+
+// Editar jornada
+const editarJornada = async (req, res) => {
+  const { id } = req.params;
+  const { nombre, hora_inicio, hora_limite_fin } = req.body;
+  if (hora_inicio && hora_limite_fin && hora_inicio >= hora_limite_fin) {
+    return res.status(400).json({ mensaje: 'La hora de inicio debe ser anterior a la hora de fin.' });
+  }
+  try {
+    // Obtener los datos actuales para completar los COALESCE
+    const actual = await pool.query('SELECT * FROM jornadas WHERE id = $1', [id]);
+    if (actual.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Jornada no encontrada' });
+    }
+    const inicio = hora_inicio || actual.rows[0].hora_inicio;
+    const fin = hora_limite_fin || actual.rows[0].hora_limite_fin;
+
+    // Validar solapamiento excluyendo la jornada actual
+    const solapas = await verificarSolapaJornada(inicio, fin, id);
+    if (solapas.length > 0) {
+      return res.status(409).json({
+        mensaje: `El horario se solapa con la jornada "${solapas[0].nombre}" (${solapas[0].hora_inicio} - ${solapas[0].hora_limite_fin}). Ajusta las horas.`
+      });
+    }
+
+    const resultado = await pool.query(
+      `UPDATE jornadas 
+       SET nombre = COALESCE($1, nombre),
+           hora_inicio = COALESCE($2, hora_inicio),
+           hora_limite_fin = COALESCE($3, hora_limite_fin)
+       WHERE id = $4 RETURNING *`,
+      [nombre, hora_inicio, hora_limite_fin, id]
+    );
+    res.json({ mensaje: 'Jornada actualizada', jornada: resultado.rows[0] });
+  } catch (error) {
+    console.error('Error DB en editarJornada:', error.message);
+    res.status(500).json({ mensaje: 'Error DB: ' + error.message });
+  }
+};
+
 module.exports = {
   crearRutaFija,
   obtenerRutasFijas,
   obtenerRutaFijaPorId,
   editarRutaFija,
-  eliminarRutaFija
+  eliminarRutaFija,
+  obtenerVehiculos,
+  obtenerJornadas,
+  crearVehiculo,
+  editarVehiculo,
+  crearJornada,
+  editarJornada
 };

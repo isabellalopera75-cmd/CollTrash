@@ -204,8 +204,9 @@ const reportarIncidencia = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!['trancon', 'accidente'].includes(tipo)) {
-      return res.status(400).json({ mensaje: 'Tipo debe ser trancon o accidente.' });
+    const tiposPermitidos = ['trancon', 'accidente', 'contenedor_lleno', 'via_bloqueada'];
+    if (!tiposPermitidos.includes(tipo)) {
+      return res.status(400).json({ mensaje: `Tipo debe ser uno de: ${tiposPermitidos.join(', ')}` });
     }
 
     const resultado = await pool.query(
