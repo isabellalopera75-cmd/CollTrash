@@ -10,20 +10,19 @@ const generarAsignaciones = async (fechaInicio = null) => {
     // Si no se pasa fecha, empezamos desde HOY para cubrir lo que queda de semana
     let fechaBase = fechaInicio ? new Date(fechaInicio) : new Date();
     
-    // Generar para los próximos 7 días a partir de la fecha base
     for (let i = 0; i < 7; i++) {
       const fechaAsignacion = new Date(fechaBase);
       fechaAsignacion.setDate(fechaBase.getDate() + i);
-      
-      // Resetear horas para comparar solo fechas
       fechaAsignacion.setHours(0,0,0,0);
       
-      const diaSemanaNombre = fechaAsignacion.toLocaleDateString('es-ES', { weekday: 'long' }).toLowerCase();
+      const normalizeString = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : '';
+      const diaSemanaNombre = normalizeString(fechaAsignacion.toLocaleDateString('es-ES', { weekday: 'long' }));
       
       for (const ruta of rutasFijas.rows) {
-        if (ruta.dias_semana.toLowerCase().includes(diaSemanaNombre)) {
-          
-          // Verificar si ya existe para evitar duplicados
+        const correspondeDia = normalizeString(ruta.dias_semana).includes(diaSemanaNombre);
+        
+        if (correspondeDia) {
+          // INSERTAR SI NO EXISTE
           const existe = await pool.query(
             'SELECT id FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND fecha = $2',
             [ruta.id, fechaAsignacion]
@@ -36,6 +35,12 @@ const generarAsignaciones = async (fechaInicio = null) => {
               [ruta.id, ruta.conductor_default_id, ruta.vehiculo_id, fechaAsignacion]
             );
           }
+        } else {
+          // ELIMINAR SI EXISTE Y ESTÁ PENDIENTE (ya no corresponde a este día)
+          await pool.query(
+            "DELETE FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND fecha = $2 AND estado = 'pendiente'",
+            [ruta.id, fechaAsignacion]
+          );
         }
       }
     }

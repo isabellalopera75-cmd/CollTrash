@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { getIo } = require('../config/socket');
 
 // Obtener alertas/incidencias activas
 const obtenerIncidenciasActivas = async (req, res) => {
@@ -61,6 +62,16 @@ const crearIncidencia = async (req, res) => {
        VALUES ($1, $2, $3, $4, FALSE) RETURNING *`,
       [asignacion_id || null, conductor_id, tipo, descripcion || '']
     );
+
+    // Emitir novedad vía WebSocket al administrador
+    const io = getIo();
+    if (io) {
+      io.emit('nueva_novedad', {
+        conductor: req.usuario.nombre || 'Conductor',
+        mensaje: `Tipo: ${tipo}\nDescripción: ${descripcion || 'Sin descripción adicional'}`
+      });
+    }
+
     res.status(201).json({ incidencia: r.rows[0] });
   } catch (error) {
     console.error(error.message);

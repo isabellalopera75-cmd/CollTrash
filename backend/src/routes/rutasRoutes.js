@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { crearRutaFija, obtenerRutasFijas, obtenerRutaFijaPorId, editarRutaFija, eliminarRutaFija, obtenerVehiculos, obtenerJornadas, crearVehiculo, editarVehiculo, crearJornada, editarJornada } = require('../controllers/rutasController');
+const { crearRutaFija, obtenerRutasFijas, obtenerRutaFijaPorId, editarRutaFija, eliminarRutaFija, restaurarRuta, obtenerVehiculos, obtenerJornadas, crearVehiculo, editarVehiculo, crearJornada, editarJornada } = require('../controllers/rutasController');
 const { verificarToken, soloAdmin } = require('../middlewares/authMiddleware');
 
 router.get('/', verificarToken, soloAdmin, obtenerRutasFijas);
@@ -14,5 +14,6 @@ router.put('/jornadas/:id', verificarToken, soloAdmin, editarJornada);
 router.get('/:id', verificarToken, soloAdmin, obtenerRutaFijaPorId);
 router.put('/:id', verificarToken, soloAdmin, editarRutaFija);
 router.delete('/:id', verificarToken, soloAdmin, eliminarRutaFija);
+router.put('/:id/restaurar', verificarToken, soloAdmin, restaurarRuta);
 
 module.exports = router;

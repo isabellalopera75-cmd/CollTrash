@@ -1,4 +1,6 @@
 const pool = require('../config/database');
+const { generarAsignaciones } = require('../services/cronService');
+const { registrarActividad } = require('../services/auditoriaService');
 
 // Crear ruta fija
 const crearRutaFija = async (req, res) => {
@@ -28,6 +30,32 @@ const crearRutaFija = async (req, res) => {
       return res.status(400).json({ mensaje: 'El vehículo no existe o no está activo.' });
     }
 
+    // NUEVA VALIDACIÓN: Verificar si existe una ruta inactiva con el mismo nombre para ofrecer restaurarla
+    const inactiva = await pool.query(
+      'SELECT id FROM rutas_fijas WHERE nombre = $1 AND activo = FALSE',
+      [nombre]
+    );
+
+    if (inactiva.rows.length > 0) {
+      return res.status(409).json({ 
+        mensaje: `Ya existe una ruta llamada "${nombre}" que fue eliminada anteriormente. ¿Deseas restaurarla?`,
+        rutaId: inactiva.rows[0].id,
+        requiereRestauracion: true 
+      });
+    }
+
+    // NUEVA VALIDACIÓN: Evitar nombres duplicados activos
+    const activa = await pool.query(
+      'SELECT id FROM rutas_fijas WHERE nombre = $1 AND activo = TRUE',
+      [nombre]
+    );
+
+    if (activa.rows.length > 0) {
+      return res.status(400).json({ 
+        mensaje: `Ya existe una ruta activa con el nombre "${nombre}". Para evitar confusiones, por favor usa un nombre diferente (ej. añadiendo el día).` 
+      });
+    }
+
     // NUEVA VALIDACIÓN: REGLA DE ORO (No repetir jornada/día para Conductor o Vehículo)
     const diasNuevos = dias_semana.split(',');
 
@@ -40,9 +68,13 @@ const crearRutaFija = async (req, res) => {
       [conductor_default_id, vehiculo_id, jornada_id]
     );
 
+    const normalizeStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
     for (const ruta of rutasExistentes.rows) {
       const diasOcupados = ruta.dias_semana.split(',');
-      const coincidencia = diasNuevos.filter(dia => diasOcupados.includes(dia));
+      const coincidencia = diasNuevos.filter(diaN => 
+        diasOcupados.some(diaO => normalizeStr(diaN) === normalizeStr(diaO))
+      );
 
       if (coincidencia.length > 0) {
         const esConductor = ruta.conductor_default_id == conductor_default_id;
@@ -75,6 +107,18 @@ const crearRutaFija = async (req, res) => {
       }
     }
 
+    // Generar asignaciones inmediatamente para que aparezcan en el panel semanal
+    await generarAsignaciones();
+
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Creación de Ruta', 
+      'rutas_fijas', 
+      rutaFija.id, 
+      `Se creó la ruta: ${rutaFija.nombre}`
+    );
+
     res.status(201).json({
       mensaje: 'Ruta fija creada exitosamente.',
       ruta: rutaFija
@@ -100,6 +144,7 @@ const obtenerRutasFijas = async (req, res) => {
        JOIN usuarios u ON u.id = rf.conductor_default_id
        JOIN vehiculos v ON v.id = rf.vehiculo_id
        JOIN jornadas j ON j.id = rf.jornada_id
+       WHERE rf.activo = TRUE
        ORDER BY rf.created_at DESC`
     );
 
@@ -159,6 +204,18 @@ const editarRutaFija = async (req, res) => {
 
   try {
     // Validar disponibilidad antes de actualizar
+    if (nombre) {
+      const activa = await pool.query(
+        'SELECT id FROM rutas_fijas WHERE nombre = $1 AND activo = TRUE AND id != $2',
+        [nombre, id]
+      );
+      if (activa.rows.length > 0) {
+        return res.status(400).json({ 
+          mensaje: `Ya existe otra ruta activa con el nombre "${nombre}". Por favor usa un nombre diferente (ej. añadiendo el día).` 
+        });
+      }
+    }
+
     const rutaActual = await pool.query('SELECT * FROM rutas_fijas WHERE id = $1', [id]);
     if (rutaActual.rows.length > 0) {
       const r = rutaActual.rows[0];
@@ -174,14 +231,19 @@ const editarRutaFija = async (req, res) => {
         [c_id, v_id, j_id, id]
       );
 
+      const normalizeStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+      const diasNuevos = d_sem.split(',');
+
       for (const rx of rExistentes.rows) {
-        const dN = d_sem.split(',');
-        const dO = rx.dias_semana.split(',');
-        const coincidencia = dN.filter(dia => dO.includes(dia));
-        if (coincidencia.length > 0) {
-          return res.status(400).json({ 
-            mensaje: `❌ Conflicto: El conductor o vehículo ya tienen la ruta "${rx.nombre}" en los días [${coincidencia.join(', ')}]` 
-          });
+        const diasOcupados = rx.dias_semana.split(',');
+        for (const diaN of diasNuevos) {
+          for (const diaO of diasOcupados) {
+            if (normalizeStr(diaN) === normalizeStr(diaO)) {
+              return res.status(400).json({ 
+                mensaje: `❌ Conflicto: El conductor o vehículo ya tienen la ruta "${rx.nombre}" el día ${diaN.trim()} en esta misma jornada.` 
+              });
+            }
+          }
         }
       }
     }
@@ -213,6 +275,18 @@ const editarRutaFija = async (req, res) => {
       );
     }
 
+    // Sincronizar asignaciones semanales con el cambio
+    await generarAsignaciones();
+
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Edición de Ruta', 
+      'rutas_fijas', 
+      id, 
+      `Se modificó la ruta: ${resultado.rows[0].nombre}. Activo: ${resultado.rows[0].activo}`
+    );
+
     res.status(200).json({
       mensaje: 'Ruta actualizada exitosamente.',
       ruta: resultado.rows[0]
@@ -229,6 +303,13 @@ const eliminarRutaFija = async (req, res) => {
   const { id } = req.params;
 
   try {
+    // Obtener nombre antes de borrar para el historial
+    const infoRuta = await pool.query(
+      'SELECT rf.nombre, j.nombre as jornada FROM rutas_fijas rf JOIN jornadas j ON j.id = rf.jornada_id WHERE rf.id = $1',
+      [id]
+    );
+    const rutaData = infoRuta.rows[0];
+
     const resultado = await pool.query(
       'UPDATE rutas_fijas SET activo = FALSE WHERE id = $1 RETURNING id',
       [id]
@@ -237,6 +318,21 @@ const eliminarRutaFija = async (req, res) => {
     if (resultado.rows.length === 0) {
       return res.status(404).json({ mensaje: 'Ruta no encontrada.' });
     }
+
+    // Limpiar asignaciones futuras pendientes de esta ruta
+    await pool.query(
+      "DELETE FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND estado = 'pendiente' AND fecha >= CURRENT_DATE",
+      [id]
+    );
+
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Eliminación de Ruta', 
+      'rutas_fijas', 
+      id, 
+      `Se eliminó la ruta "${rutaData?.nombre}" de la jornada ${rutaData?.jornada}. (ID: ${id})`
+    );
 
     res.status(200).json({ mensaje: 'Ruta eliminada exitosamente.' });
 
@@ -287,6 +383,15 @@ const crearVehiculo = async (req, res) => {
       'INSERT INTO vehiculos (placa, modelo, capacidad_ton) VALUES ($1, $2, $3) RETURNING *',
       [placa.toUpperCase(), modelo, cap]
     );
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Registro de Vehículo', 
+      'vehiculos', 
+      resultado.rows[0].id, 
+      `Se registró el vehículo: ${placa.toUpperCase()}`
+    );
+
     res.status(201).json({ mensaje: 'Vehículo registrado', vehiculo: resultado.rows[0] });
   } catch (error) {
     console.error('Error DB:', error);
@@ -326,6 +431,15 @@ const editarVehiculo = async (req, res) => {
     if (resultado.rows.length === 0) {
       return res.status(404).json({ mensaje: 'Vehículo no encontrado' });
     }
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Edición de Vehículo', 
+      'vehiculos', 
+      id, 
+      `Se actualizaron los datos del vehículo: ${resultado.rows[0].placa}`
+    );
+
     res.json({ mensaje: 'Vehículo actualizado', vehiculo: resultado.rows[0] });
   } catch (error) {
     console.error(error);
@@ -374,6 +488,15 @@ const crearJornada = async (req, res) => {
       'INSERT INTO jornadas (nombre, hora_inicio, hora_limite_fin) VALUES ($1, $2, $3) RETURNING *',
       [nombre, hora_inicio, hora_limite_fin]
     );
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Creación de Jornada', 
+      'jornadas', 
+      resultado.rows[0].id, 
+      `Se creó la jornada: ${nombre}`
+    );
+
     res.status(201).json({ mensaje: 'Jornada creada', jornada: resultado.rows[0] });
   } catch (error) {
     console.error(error);
@@ -413,10 +536,55 @@ const editarJornada = async (req, res) => {
        WHERE id = $4 RETURNING *`,
       [nombre, hora_inicio, hora_limite_fin, id]
     );
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Edición de Jornada', 
+      'jornadas', 
+      id, 
+      `Se modificó la jornada: ${resultado.rows[0].nombre}`
+    );
+
     res.json({ mensaje: 'Jornada actualizada', jornada: resultado.rows[0] });
   } catch (error) {
     console.error('Error DB en editarJornada:', error.message);
     res.status(500).json({ mensaje: 'Error DB: ' + error.message });
+  }
+};
+
+// Restaurar ruta eliminada
+const restaurarRuta = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const resultado = await pool.query(
+      'UPDATE rutas_fijas SET activo = TRUE WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Ruta no encontrada' });
+    }
+
+    const ruta = resultado.rows[0];
+
+    // Sincronizar asignaciones futuras tras restaurar
+    const { generarAsignaciones } = require('../services/cronService');
+    await generarAsignaciones(ruta.id);
+
+    // Auditoría
+    const { registrarActividad } = require('../services/auditoriaService');
+    await registrarActividad(
+      req.usuario?.id, 
+      'Restauración de Ruta', 
+      'rutas_fijas', 
+      id, 
+      `Se restauró la ruta: ${ruta.nombre}`
+    );
+
+    res.json({ mensaje: 'Ruta restaurada exitosamente', ruta });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al restaurar ruta' });
   }
 };
 
@@ -426,6 +594,7 @@ module.exports = {
   obtenerRutaFijaPorId,
   editarRutaFija,
   eliminarRutaFija,
+  restaurarRuta,
   obtenerVehiculos,
   obtenerJornadas,
   crearVehiculo,

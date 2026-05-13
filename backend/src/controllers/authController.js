@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
+const { registrarActividad } = require('../services/auditoriaService');
 require('dotenv').config();
 
 // Login admin y conductor
@@ -105,6 +106,15 @@ const registrarConductor = async (req, res) => {
       [nombre, email, hash, cedulaNorm, telefonoNorm]
     );
 
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Registro de Conductor', 
+      'usuarios', 
+      resultado.rows[0].id, 
+      `Se registró al conductor: ${nombre} (${email})`
+    );
+
     res.status(201).json({
       mensaje: 'Conductor registrado exitosamente.',
       conductor: resultado.rows[0]
@@ -171,6 +181,15 @@ const editarConductor = async (req, res) => {
     if (resultado.rows.length === 0) {
       return res.status(404).json({ mensaje: 'Conductor no encontrado' });
     }
+
+    // Auditoría
+    await registrarActividad(
+      req.usuario?.id, 
+      'Edición de Conductor', 
+      'usuarios', 
+      id, 
+      `Se actualizaron los datos del conductor: ${resultado.rows[0].nombre}`
+    );
 
     res.json({ mensaje: 'Conductor actualizado exitosamente', conductor: resultado.rows[0] });
   } catch (error) {

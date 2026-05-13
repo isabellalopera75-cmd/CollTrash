@@ -20,6 +20,7 @@ const asignacionesRoutes = require('./routes/asignacionesRoutes');
 const puntosDescargaRoutes = require('./routes/puntosDescargaRoutes');
 const incidenciasRoutes = require('./routes/incidenciasRoutes');
 const configRoutes = require('./routes/configRoutes');
+const auditoriaRoutes = require('./routes/auditoriaRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -42,6 +43,7 @@ app.use('/api/asignaciones', asignacionesRoutes);
 app.use('/api/puntos-descarga', puntosDescargaRoutes);
 app.use('/api/incidencias', incidenciasRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/auditoria', auditoriaRoutes);
 
 // Endpoint temporal para probar la generación de la semana (Solo para Admin)
 app.post('/api/test/generar-asignaciones', verificarToken, soloAdmin, async (req, res) => {

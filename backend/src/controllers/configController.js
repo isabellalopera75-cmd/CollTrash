@@ -18,6 +18,17 @@ const updateConfig = async (req, res) => {
       'INSERT INTO configuracion (clave, valor) VALUES ($1, $2) ON CONFLICT (clave) DO UPDATE SET valor = $2',
       [clave, typeof valor === 'object' ? JSON.stringify(valor) : valor]
     );
+
+    // Auditoría
+    const { registrarActividad } = require('../services/auditoriaService');
+    await registrarActividad(
+      req.usuario?.id, 
+      'Actualización de Configuración', 
+      'configuracion', 
+      null, 
+      `Se actualizó la clave: ${clave}`
+    );
+
     res.json({ mensaje: 'Configuración actualizada' });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al actualizar configuración' });
