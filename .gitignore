@@ -25,12 +25,7 @@ yarn-error.log*
 # Database and Backups
 *.sql
 *.txt
-backend/borrar_rutas.js
-backend/cambiar_pass.js
-backend/check_schema.js
-backend/jornadas_schema.txt
-backend/schema_info.txt
-backend/seed_barrios.js
+backend/scratch/
 
 # IDEs
 .vscode/

@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { crearNotificacion } = require('../services/notificacionService');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
@@ -23,6 +24,14 @@ const crearReporte = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [ciudadanoId, latitud, longitud, descripcion, foto_url, tipo_problema, nombre_ciudadano]
     );
+
+    // NOTIFICAR ADMIN: Nuevo reporte ciudadano
+    await crearNotificacion({
+      titulo: '👥 Reporte Ciudadano',
+      mensaje: `Nuevo reporte de ${nombre_ciudadano} por ${tipo_problema}.`,
+      tipo: 'comunidad',
+      metadata: { reporte_id: resultado.rows[0].id, tipo: 'REPORTE_CIUDADANO' }
+    });
 
     res.status(201).json({ mensaje: 'Reporte enviado exitosamente.', reporte: resultado.rows[0] });
   } catch (error) {
@@ -87,24 +96,77 @@ const atenderReporte = async (req, res) => {
 
 const rechazarReporte = async (req, res) => {
   const { id } = req.params;
-  const { motivo } = req.body;
+  const { justificacion } = req.body;
 
   try {
-    const reporte = await pool.query(
-      `UPDATE reportes_ciudadanos SET estado = 'rechazado', justificacion_rechazo = $1
-       WHERE id = $2 RETURNING *`,
-      [motivo, id]
+    const resultado = await pool.query(
+      `UPDATE reportes_ciudadanos SET estado = 'rechazado', justificacion_rechazo = $1 WHERE id = $2 RETURNING *`,
+      [justificacion, id]
     );
 
-    if (reporte.rows.length === 0) {
-      return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
-    }
-
-    res.status(200).json({ mensaje: 'Reporte rechazado.' });
+    res.status(200).json({ mensaje: 'Reporte rechazado.', reporte: resultado.rows[0] });
   } catch (error) {
-    console.error('Error al rechazar:', error.message);
+    console.error('Error al rechazar reporte:', error.message);
     res.status(500).json({ mensaje: 'Error interno del servidor.' });
   }
 };
 
-module.exports = { crearReporte, obtenerReportes, atenderReporte, rechazarReporte };
+const actualizarEstado = async (req, res) => {
+  const { id } = req.params;
+  const { estado, justificacion_rechazo, ruta_id, fecha_programada } = req.body;
+
+  try {
+    let resultado;
+    if (estado === 'en_proceso' || estado === 'resuelto' || estado === 'atendido') {
+      const msjAceptado = `Programado para recolección en ruta asignada (${fecha_programada || 'Próximas 48h'})`;
+      resultado = await pool.query(
+        `UPDATE reportes_ciudadanos 
+         SET estado = $1, asignacion_id = $2, justificacion_rechazo = $4, atendido_at = NOW()
+         WHERE id = $3 RETURNING *`,
+        [estado, ruta_id || null, id, msjAceptado]
+      );
+    } else if (estado === 'rechazado') {
+      resultado = await pool.query(
+        `UPDATE reportes_ciudadanos 
+         SET estado = 'rechazado', justificacion_rechazo = $1
+         WHERE id = $2 RETURNING *`,
+        [justificacion_rechazo || null, id]
+      );
+    } else {
+      resultado = await pool.query(
+        `UPDATE reportes_ciudadanos SET estado = $1 WHERE id = $2 RETURNING *`,
+        [estado, id]
+      );
+    }
+
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
+    }
+
+    res.status(200).json({ mensaje: 'Estado de reporte actualizado.', reporte: resultado.rows[0] });
+  } catch (error) {
+    console.error('Error al actualizar estado del reporte:', error.message);
+    res.status(500).json({ mensaje: 'Error interno del servidor.' });
+  }
+};
+
+const obtenerMisReportes = async (req, res) => {
+  const { ids } = req.query; // '1,2,3'
+  if (!ids) return res.status(200).json({ reportes: [] });
+  try {
+    const idArray = ids.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    if (idArray.length === 0) return res.status(200).json({ reportes: [] });
+
+    const placeholders = idArray.map((_, i) => `$${i + 1}`).join(',');
+    const resultado = await pool.query(
+      `SELECT * FROM reportes_ciudadanos WHERE id IN (${placeholders}) ORDER BY created_at DESC`,
+      idArray
+    );
+    res.status(200).json({ reportes: resultado.rows });
+  } catch (error) {
+    console.error('Error al obtener mis reportes:', error.message);
+    res.status(500).json({ mensaje: 'Error interno del servidor.' });
+  }
+};
+
+module.exports = { crearReporte, obtenerReportes, atenderReporte, rechazarReporte, obtenerMisReportes, actualizarEstado };

@@ -8,7 +8,9 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
               rf.nombre AS ruta_nombre,
               u.nombre AS conductor_nombre,
               v.placa AS vehiculo_placa,
-              j.nombre AS jornada_nombre
+              j.nombre AS jornada_nombre,
+              j.hora_inicio AS j_hora_inicio,
+              j.hora_limite_fin
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
        JOIN usuarios u ON u.id = asig.conductor_id
@@ -29,7 +31,6 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
 
     const conteosMap = {};
     conteos.rows.forEach(r => {
-      // Formato YYYY-MM-DD local
       const f = new Date(r.fecha).toISOString().split('T')[0];
       conteosMap[f] = parseInt(r.cantidad);
     });
@@ -49,7 +50,6 @@ const reasignarAsignacion = async (req, res) => {
   const { conductor_id, vehiculo_id } = req.body;
   
   try {
-    // 1. Obtener detalles de la asignación actual (fecha y jornada)
     const asigActual = await pool.query(
       `SELECT asig.fecha, asig.conductor_id, asig.ruta_fija_id, rf.jornada_id 
        FROM asignaciones_semanales asig
@@ -64,8 +64,6 @@ const reasignarAsignacion = async (req, res) => {
 
     const { fecha, jornada_id } = asigActual.rows[0];
 
-    // 2. Verificar si el conductor o vehículo ya tienen otra asignación 
-    // en la misma fecha y misma jornada
     const conflictos = await pool.query(
       `SELECT rf.nombre 
        FROM asignaciones_semanales asig
@@ -83,7 +81,6 @@ const reasignarAsignacion = async (req, res) => {
       });
     }
 
-    // 3. Proceder con la reasignación en asignaciones_semanales
     const resultado = await pool.query(
       `UPDATE asignaciones_semanales 
        SET conductor_id = $1, vehiculo_id = $2
@@ -91,11 +88,9 @@ const reasignarAsignacion = async (req, res) => {
       [conductor_id, vehiculo_id, id]
     );
 
-    // 4. Registrar en el historial de reemplazos (cambios_conductor)
     const motivoCambio = req.body.motivo || 'Reasignación diaria manual';
     const conductorOriginal = asigActual.rows[0].conductor_id || null;
     
-    // Asumiendo estructura típica por la descripción del usuario
     try {
       await pool.query(
         `INSERT INTO cambios_conductor (ruta_fija_id, conductor_original_id, conductor_nuevo_id, motivo, fecha_inicio, fecha_fin, tipo_cambio)
@@ -103,8 +98,7 @@ const reasignarAsignacion = async (req, res) => {
         [asigActual.rows[0].ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, asigActual.rows[0].fecha]
       );
     } catch (err) {
-      console.error("No se pudo insertar en cambios_conductor. Verifica las columnas:", err.message);
-      // No bloqueamos la petición si la tabla tiene columnas distintas, solo loggeamos el error
+      console.error("No se pudo insertar en cambios_conductor:", err.message);
     }
 
     res.json({ mensaje: 'Asignación reasignada con éxito e historial actualizado', asignacion: resultado.rows[0] });
@@ -114,8 +108,36 @@ const reasignarAsignacion = async (req, res) => {
   }
 };
 
+const habilitarInicioTardio = async (req, res) => {
+  const { id } = req.params;
+  const admin_id = req.usuario.id;
+  const { motivo } = req.body;
+
+  try {
+    // 1. Habilitar la asignación
+    await pool.query(
+      `UPDATE asignaciones_semanales 
+       SET habilitado_por_admin = TRUE, inicio_tardio = TRUE
+       WHERE id = $1`,
+      [id]
+    );
+
+    // 2. Registrar en novedades_operativas
+    await pool.query(
+      `INSERT INTO novedades_operativas (asignacion_id, admin_id, tipo_novedad, descripcion)
+       VALUES ($1, $2, $3, $4)`,
+      [id, admin_id, 'REACTIVACION_MANUAL', motivo || 'Admin habilitó inicio fuera de tiempo']
+    );
+
+    res.json({ mensaje: 'Inicio tardío habilitado exitosamente.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al habilitar inicio tardío.' });
+  }
+};
 
 module.exports = {
   obtenerAsignacionesPorFecha,
-  reasignarAsignacion
+  reasignarAsignacion,
+  habilitarInicioTardio
 };

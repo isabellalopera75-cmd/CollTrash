@@ -10,7 +10,8 @@ export default function Monitoreo() {
   const [vehiculos, setVehiculos] = useState([]);
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:3000');
+    const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
+    socketRef.current = io(socketUrl);
     
     socketRef.current.on('ubicacion_vehiculo', (data) => {
       setVehiculos(prev => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import AdminLayout from '../components/Layout/AdminLayout';
-import { obtenerRutas, obtenerReportes } from '../services/api';
+import { dashboardDiario } from '../services/api';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -30,147 +30,147 @@ ChartJS.register(
 export default function Dashboard() {
   const [stats, setStats] = useState({
     rutasHoy: 0,
+    completadas: 0,
+    activas: 0,
     reportesPendientes: 0,
-    toneladasHoy: 12.5,
-    kmHoy: 84.2
+    toneladasHoy: 0,
+    kmHoy: 0
   });
 
   useEffect(() => {
-    // Simular carga de datos reales
     const fetchData = async () => {
       try {
-        const [r, rep] = await Promise.all([obtenerRutas(), obtenerReportes()]);
-        setStats(prev => ({
-          ...prev,
-          rutasHoy: r.data.rutas.length,
-          reportesPendientes: rep.data.reportes.filter(x => x.estado === 'pendiente').length
-        }));
-      } catch (e) { console.error(e); }
+        const res = await dashboardDiario();
+        const d = res.data;
+        setStats({
+          rutasHoy: d.rutas.total_programadas,
+          completadas: parseInt(d.rutas.completadas || 0),
+          activas: parseInt(d.rutas.activas || 0),
+          reportesPendientes: d.reportes_pendientes,
+          toneladasHoy: parseFloat(d.eficiencia.toneladas_totales || 0).toFixed(1),
+          kmHoy: parseFloat(d.eficiencia.km_totales || 0).toFixed(1)
+        });
+      } catch (e) { 
+        console.error('Error cargando stats:', e); 
+      }
     };
     fetchData();
   }, []);
 
-  // Configuración de Gráfica de Barras (Toneladas Semanales)
-  const barData = {
-    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+  // Gráfica Doughnut (Estado de Rutas)
+  const doughnutData = {
+    labels: ['Completadas', 'En Curso', 'Pendientes'],
     datasets: [{
-      label: 'Toneladas Recolectadas',
-      data: [12, 19, 15, 17, 22, 14, 0],
-      backgroundColor: 'rgba(0, 255, 157, 0.6)',
-      borderColor: 'var(--color-primary)',
-      borderWidth: 1,
-      borderRadius: 5,
+      data: [stats.completadas, stats.activas, Math.max(0, stats.rutasHoy - stats.completadas - stats.activas)],
+      backgroundColor: ['#00ff9d', '#ffcc00', '#333'],
+      borderWidth: 0,
     }]
   };
 
-  // Configuración de Gráfica de Líneas (Km Mensuales)
-  const lineData = {
-    labels: ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4'],
+  // Gráfica de Barras (Muestra representativa)
+  const barData = {
+    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
     datasets: [{
-      label: 'Kilómetros Recorridos',
-      data: [450, 520, 480, 600],
-      fill: true,
-      backgroundColor: 'rgba(0, 255, 157, 0.1)',
-      borderColor: 'var(--color-primary)',
-      tension: 0.4,
+      label: 'Toneladas',
+      data: [12, 19, 15, 17, 22, 14, 0],
+      backgroundColor: 'rgba(0, 255, 157, 0.6)',
+      borderRadius: 8,
     }]
   };
 
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
-      legend: { display: false },
-      tooltip: { 
-        backgroundColor: '#1a1d23',
-        titleColor: '#fff',
-        bodyColor: '#00ff9d',
-        borderColor: '#333',
-        borderWidth: 1 
-      }
+      legend: { position: 'bottom', labels: { color: '#888', font: { size: 10 } } }
     },
     scales: {
-      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } },
+      y: { display: false },
       x: { grid: { display: false }, ticks: { color: '#888' } }
     }
   };
 
+  const s = {
+    card: { background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--border-color)' },
+    title: { fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' },
+    value: { fontSize: '32px', fontWeight: 800, color: 'white' }
+  };
+
+  // Cálculo de ahorro/combustible estimado (Simulado)
+  const combustibleEstimado = (stats.kmHoy * 0.15).toFixed(1); // 0.15 galones por km
+
   return (
     <AdminLayout>
       <div style={{ marginBottom: '30px' }}>
-        <h2 style={{ fontSize: '26px', fontWeight: 700, color: 'white' }}>
-          <i className="bi bi-graph-up-arrow" style={{ marginRight: '12px', color: 'var(--color-primary)' }}></i>
-          Resumen Operativo
-        </h2>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Panel de control y métricas de CollTrash</p>
+        <h2 style={{ fontSize: '28px', fontWeight: 700, color: 'white' }}>Panel de Control</h2>
+        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Métricas operacionales en tiempo real</p>
       </div>
 
-      {/* Tarjetas Superiores */}
+      {/* KPI CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-        <div className="card" style={{ borderLeft: '4px solid var(--color-primary)' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Rutas Activas Hoy</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: 'white' }}>{stats.rutasHoy}</div>
-          <div style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '5px' }}>↑ 12% vs ayer</div>
+        <div style={s.card}>
+          <div style={s.title}>Rutas de Hoy</div>
+          <div style={s.value}>{stats.rutasHoy}</div>
+          <div style={{ fontSize: '11px', color: 'var(--color-primary)', marginTop: '8px' }}>
+            {stats.completadas} finalizadas con éxito
+          </div>
         </div>
-        <div className="card" style={{ borderLeft: '4px solid #ffcc00' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Reportes Pendientes</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: 'white' }}>{stats.reportesPendientes}</div>
-          <div style={{ fontSize: '11px', color: '#ffcc00', marginTop: '5px' }}>Requieren atención inmediata</div>
+        <div style={{ ...s.card, borderTop: '4px solid #ffcc00' }}>
+          <div style={s.title}>Carga Recolectada</div>
+          <div style={s.value}>{stats.toneladasHoy} <span style={{ fontSize: '16px' }}>t</span></div>
+          <div style={{ fontSize: '11px', color: '#ffcc00', marginTop: '8px' }}>Total reportado por conductores</div>
         </div>
-        <div className="card" style={{ borderLeft: '4px solid #00c2ff' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Toneladas Totales</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: 'white' }}>{stats.toneladasHoy} t</div>
-          <div style={{ fontSize: '11px', color: '#00c2ff', marginTop: '5px' }}>Promedio diario estable</div>
+        <div style={{ ...s.card, borderTop: '4px solid #00c2ff' }}>
+          <div style={s.title}>Distancia Total</div>
+          <div style={s.value}>{stats.kmHoy} <span style={{ fontSize: '16px' }}>km</span></div>
+          <div style={{ fontSize: '11px', color: '#00c2ff', marginTop: '8px' }}>Consumo est.: {combustibleEstimado} Gal</div>
         </div>
-        <div className="card" style={{ borderLeft: '4px solid #ff4444' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Km Recorridos</div>
-          <div style={{ fontSize: '32px', fontWeight: 800, color: 'white' }}>{stats.kmHoy} km</div>
-          <div style={{ fontSize: '11px', color: '#ff4444', marginTop: '5px' }}>Consumo de combustible optimizado</div>
+        <div style={{ ...s.card, borderTop: '4px solid #ff4444' }}>
+          <div style={s.title}>Novedades</div>
+          <div style={s.value}>{stats.reportesPendientes}</div>
+          <div style={{ fontSize: '11px', color: '#ff4444', marginTop: '8px' }}>Reportes ciudadanos pendientes</div>
         </div>
       </div>
 
-      {/* Gráficas */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px' }}>
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-            <h4 style={{ fontWeight: 600 }}>Recolección Semanal (Toneladas)</h4>
-            <select style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: '12px' }}>
-              <option>Esta semana</option>
-              <option>Semana pasada</option>
-            </select>
-          </div>
+      {/* GRÁFICOS */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '30px' }}>
+        <div style={s.card}>
+          <h4 style={{ marginBottom: '20px', fontWeight: 600 }}>Rendimiento Semanal (Toneladas)</h4>
           <div style={{ height: '300px' }}>
             <Bar data={barData} options={chartOptions} />
           </div>
         </div>
-
-        <div className="card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-          <div>
-            <i className="bi bi-search" style={{ fontSize: '40px', color: 'var(--text-muted)', display: 'block', marginBottom: '10px' }}></i>
-            <p style={{ color: 'var(--text-muted)' }}>No hay datos suficientes para mostrar más detalles hoy.</p>
+        <div style={s.card}>
+          <h4 style={{ marginBottom: '20px', fontWeight: 600 }}>Estado de Jornada</h4>
+          <div style={{ height: '240px' }}>
+            <Doughnut data={doughnutData} options={{ ...chartOptions, cutout: '70%' }} />
+          </div>
+          <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+             Rutas procesadas: {Math.round((stats.completadas / stats.rutasHoy) * 100) || 0}%
           </div>
         </div>
       </div>
 
-      {/* Tabla rápida de efectividad */}
-      <div className="card" style={{ marginTop: '20px' }}>
-        <h4 style={{ fontWeight: 600, marginBottom: '15px' }}>
-          <i className="bi bi-check2-circle" style={{ marginRight: '8px' }}></i>
-          Estado de Sectores (Hoy)
-        </h4>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', padding: '10px 0', borderBottom: '1px solid #333', fontSize: '12px', color: 'var(--text-muted)' }}>
-          <span>SECTOR / RUTA</span>
-          <span>ESTADO</span>
-          <span>PROGRESO</span>
+      {/* SECCIÓN DE MEJORES CONDUCTORES (SUGERENCIA) */}
+      <div style={s.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h4 style={{ fontWeight: 600 }}>Ranking de Eficiencia (Conductores)</h4>
+          <span style={{ fontSize: '12px', color: 'var(--color-primary)', cursor: 'pointer' }}>Ver todo</span>
         </div>
-        <div style={{ padding: '15px 0', borderBottom: '1px solid #222', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', alignItems: 'center' }}>
-          <span style={{ fontSize: '14px' }}>Ruta Norte - Sector 01</span>
-          <span className="status-badge status-active">COMPLETADO</span>
-          <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>100%</span>
-        </div>
-        <div style={{ padding: '15px 0', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', alignItems: 'center' }}>
-          <span style={{ fontSize: '14px' }}>Ruta Sur - Sector A</span>
-          <span className="status-badge status-warning">EN CURSO</span>
-          <span style={{ color: '#ffcc00', fontWeight: 600 }}>65%</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+           {[
+             { n: 'Josué Cárdenas', e: 98, t: 12.4 },
+             { n: 'Felipe Pérez', e: 95, t: 10.1 },
+             { n: 'Marcos Rivas', e: 88, t: 9.8 }
+           ].map((c, i) => (
+             <div key={i} style={{ padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid #222' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                   <span style={{ fontSize: '14px', fontWeight: 600 }}>{c.n}</span>
+                   <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>{c.e}%</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.t} Toneladas hoy</div>
+             </div>
+           ))}
         </div>
       </div>
     </AdminLayout>

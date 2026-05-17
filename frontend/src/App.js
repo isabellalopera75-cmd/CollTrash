@@ -12,6 +12,7 @@ import Monitoreo from './pages/Monitoreo';
 import Reportes from './pages/Reportes';
 import Configuracion from './pages/Configuracion';
 import Historial from './pages/Historial';
+import ReportesOperativos from './pages/ReportesOperativos';
 import PortalCiudadano from './pages/PortalCiudadano';
 import ConductorPanel from './pages/ConductorPanel';
 
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/vehiculos" element={<PrivateRoute rol="administrador"><Vehiculos /></PrivateRoute>} />
           <Route path="/monitoreo" element={<PrivateRoute rol="administrador"><Monitoreo /></PrivateRoute>} />
           <Route path="/reportes" element={<PrivateRoute rol="administrador"><Reportes /></PrivateRoute>} />
+          <Route path="/reportes-operativos" element={<PrivateRoute rol="administrador"><ReportesOperativos /></PrivateRoute>} />
           <Route path="/configuracion" element={<PrivateRoute rol="administrador"><Configuracion /></PrivateRoute>} />
           <Route path="/historial" element={<PrivateRoute rol="administrador"><Historial /></PrivateRoute>} />
           <Route path="/portal" element={<PortalCiudadano />} />

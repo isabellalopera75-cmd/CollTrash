@@ -19,13 +19,21 @@ export default function ConductorPanel() {
   const [iniciado, setIniciado] = useState(false);
   const [completando, setCompletando] = useState(false);
   const [posicion, setPosicion] = useState(NEIVA);
+  const [progreso, setProgreso] = useState(0);
   const simRef = useRef(null);
   const timerRef = useRef(null);
   const socketRef = useRef(null);
   const [tiempoMin, setTiempoMin] = useState(0);
+  const [mostrarModalTardio, setMostrarModalTardio] = useState(false);
+  const [justificacionTardio, setJustificacionTardio] = useState('');
+  
+  const [mostrarModalFin, setMostrarModalFin] = useState(false);
+  const [toneladas, setToneladas] = useState('');
+  const [kmFinales, setKmFinales] = useState(0);
 
   useEffect(() => { 
-    socketRef.current = io('http://localhost:3000');
+    const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
+    socketRef.current = io(socketUrl);
     cargar(); 
     return () => { 
       clearInterval(simRef.current); 
@@ -57,58 +65,68 @@ export default function ConductorPanel() {
     finally { setCargando(false); }
   };
 
-  const iniciarRecorrido = async () => {
-    if (iniciado) return;
-    setIniciado(true);
-    if (asignacion) {
-      try { await API.put(`/conductor/asignacion/${asignacion.id}/iniciar`); } catch {}
+  useEffect(() => {
+    if (!asignacion || !socketRef.current) return;
+    
+    if (asignacion.estado === 'activa' && !iniciado) {
+      setIniciado(true);
     }
-    // marcar primera parada como en_curso si no lo está
-    setParadas(prev => prev.map((p, i) => i === 0 && p.estado === 'pendiente' ? { ...p, estado: 'en_curso' } : p));
-    // timer minutos
-    timerRef.current = setInterval(() => setTiempoMin(m => m + 1), 60000);
-    // simular movimiento GPS en trazado
-    const trazado = paradas.reduce((a, p) => { try { if (p.trazado_geom) return [...a, ...JSON.parse(p.trazado_geom)]; } catch {} return a; }, []);
-    const pts = trazado.length ? trazado : FAKE_TRAZADO;
-    
-    // El vehículo se mueve cada 2 segundos para que sea visible y dinámico en la demostración
-    const msPorPunto = 2000;
-    
-    let idx = 0;
-    
-    // Mover la posición
-    simRef.current = setInterval(() => {
-      idx++;
-      if (idx >= pts.length) {
-         idx = 0; // Reiniciar para crear un bucle infinito de demostración
-      }
-      setPosicion(pts[idx]);
-    }, msPorPunto);
 
-    // Emitir la posición actual cada 3 segundos al administrador
-    const emitInterval = setInterval(() => {
-      if (socketRef.current && asignacion) {
-        const currentPos = pts[idx];
-        socketRef.current.emit('actualizar_ubicacion', {
-          id: asignacion.vehiculo_id,
-          cod: asignacion.vehiculo_placa || 'VEH',
-          conductor: usuario.nombre,
-          lat: currentPos[0],
-          lng: currentPos[1],
-          ruta: asignacion.ruta_nombre,
-          progreso: Math.round((idx / pts.length) * 100),
-          sector: 'En Operación',
-          estado: 'en_ruta',
-          last: '0s'
-        });
-      }
-    }, 3000);
+    const handlePosicion = (data) => {
+      setPosicion([data.lat, data.lng]);
+      if (data.progreso) setProgreso(data.progreso);
+      if (data.km) setKmFinales(data.km);
+    };
+    
+    const handleCompletada = (data) => {
+      setProgreso(100);
+      if (data?.km_finales) setKmFinales(data.km_finales);
+      setMostrarModalFin(true);
+      cargar(); 
+    };
 
-    // Limpiar el emisor al desmontar
-    const originalLimpiar = timerRef.current;
-    timerRef.current = setInterval(() => setTiempoMin(m => m + 1), 60000);
-    // Para simplificar, guardamos el emitInterval en timerRef temporalmente o limpiamos manual
-    window.emitIntervalRef = emitInterval;
+    socketRef.current.on(`posicion_conductor_${asignacion.id}`, handlePosicion);
+    socketRef.current.on(`simulacion_completada_${asignacion.id}`, handleCompletada);
+
+    return () => {
+      socketRef.current.off(`posicion_conductor_${asignacion.id}`, handlePosicion);
+      socketRef.current.off(`simulacion_completada_${asignacion.id}`, handleCompletada);
+    };
+  }, [asignacion]);
+
+  const iniciarRecorrido = async (justificacion = null) => {
+    if (iniciado) return;
+    if (asignacion) {
+      try { 
+        const res = await API.put(`/conductor/asignacion/${asignacion.id}/iniciar`, { justificacion });
+        
+        if (res.data.requiere_justificacion) {
+          setMostrarModalTardio(true);
+          return;
+        }
+
+        setIniciado(true);
+        setMostrarModalTardio(false);
+        // marcar primera parada como en_curso si no lo está
+        setParadas(prev => prev.map((p, i) => i === 0 && p.estado === 'pendiente' ? { ...p, estado: 'en_curso' } : p));
+        // timer minutos locales
+        timerRef.current = setInterval(() => setTiempoMin(m => m + 1), 60000);
+      } catch (e) {
+        console.error('❌ ERROR AL INICIAR RUTA:', e.response?.data || e.message);
+      }
+    }
+  };
+
+  const finalizarJornada = async () => {
+    if (!toneladas) return alert('Por favor ingresa las toneladas recolectadas');
+    try {
+      await API.put(`/conductor/asignacion/${asignacion.id}/finalizar`, { toneladas });
+      setIniciado(false);
+      setMostrarModalFin(false);
+      window.location.reload(); 
+    } catch (e) {
+      console.error('Error al finalizar:', e.response?.data || e.message);
+    }
   };
 
   const completarParada = async (saId) => {
@@ -116,8 +134,13 @@ export default function ConductorPanel() {
     setCompletando(true);
     await new Promise(r => setTimeout(r, 1200));
     try {
-      if (asignacion) await API.put(`/conductor/parada/${saId}/completar`, { porcentaje_recorrido: 100 });
-    } catch {}
+      const parada = paradas.find(p => p.id === saId);
+      if (asignacion && parada) {
+        await API.put(`/conductor/asignacion/${asignacion.id}/sector/${parada.sector_id}/progreso`, { porcentaje_recorrido: 100 });
+      }
+    } catch (e) {
+      console.error('Error al completar parada:', e);
+    }
     setParadas(prev => {
       const idx = prev.findIndex(p => p.id === saId);
       return prev.map((p, i) => {
@@ -145,9 +168,20 @@ export default function ConductorPanel() {
       <style>{`
         @keyframes pulsar { 0%,100%{opacity:1} 50%{opacity:0.3} }
         .dot-pulsar { animation: pulsar 1.5s ease-in-out infinite; }
+        .cp-wrapper {
+          min-height: 100vh; width: 100vw; background-color: #05070A; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+        }
+        .cp-container {
+          width: 100%; max-width: 430px; height: calc(100vh - 32px); max-height: 920px; background-color: #0a0a0a; display: flex; flex-direction: column; position: relative; overflow: hidden; border: 1px solid #1f2937; border-radius: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85), 0 0 50px rgba(34,197,94,0.08); fontFamily: Inter, sans-serif;
+        }
+        @media (max-width: 768px) {
+          .cp-wrapper { padding: 0; background-color: #0a0a0a; }
+          .cp-container { max-width: 100%; height: 100dvh; max-height: none; border: none; border-radius: 0; box-shadow: none; }
+        }
       `}</style>
 
-      <div style={{ height: '100dvh', background: s.bg, display: 'flex', flexDirection: 'column', maxWidth: 430, margin: '0 auto', position: 'relative', fontFamily: 'Inter, sans-serif' }}>
+      <div className="cp-wrapper">
+        <div className="cp-container">
 
         {/* STATUS BAR */}
         <div style={{ background: '#050505', padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -237,11 +271,40 @@ export default function ConductorPanel() {
           </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {/* Botón iniciar flotante (solo si no inició) */}
+            {/* Botón iniciar flotante (solo si no inició y no ha expirado) */}
             {!iniciado && tab === 'ruta' && (
+              (() => {
+                const [hf, mf] = (asignacion?.hora_limite_fin || '23:59:59').split(':');
+                const fin = new Date();
+                fin.setHours(parseInt(hf), parseInt(mf), 0);
+                const expirada = new Date() > fin;
+
+                if (expirada) {
+                  return (
+                    <div style={{ padding: '12px 16px', background: 'rgba(239, 68, 68, 0.1)', borderBottom: `1px solid ${s.border}`, textAlign: 'center' }}>
+                      <span style={{ color: '#ef4444', fontSize: '13px', fontWeight: 700 }}>
+                        <i className="bi bi-exclamation-octagon-fill" style={{ marginRight: '8px' }}></i>
+                        JORNADA EXPIRADA (Finalizó {asignacion?.hora_limite_fin?.substring(0, 5)})
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ padding: '12px 16px', background: '#0d0d0d', borderBottom: `1px solid ${s.border}` }}>
+                    <button onClick={() => iniciarRecorrido()} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: 'none', background: s.green, color: '#000', fontWeight: 800, fontSize: '15px', cursor: 'pointer' }}>
+                      <i className="bi bi-play-fill" style={{ marginRight: '8px' }}></i>Iniciar Recorrido
+                    </button>
+                  </div>
+                );
+              })()
+            )}
+
+            {/* Botón finalizar ruta (solo si llegó al 100%) */}
+            {iniciado && porcentaje === 100 && tab === 'ruta' && (
               <div style={{ padding: '12px 16px', background: '#0d0d0d', borderBottom: `1px solid ${s.border}` }}>
-                <button onClick={iniciarRecorrido} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: 'none', background: s.green, color: '#000', fontWeight: 800, fontSize: '15px', cursor: 'pointer' }}>
-                  <i className="bi bi-play-fill" style={{ marginRight: '8px' }}></i>Iniciar Recorrido
+                <button onClick={() => setMostrarModalFin(true)} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: 'none', background: s.amber, color: '#000', fontWeight: 800, fontSize: '15px', cursor: 'pointer', animation: 'pulsar 2s infinite' }}>
+                  <i className="bi bi-check2-circle" style={{ marginRight: '8px' }}></i>Finalizar Ruta
                 </button>
               </div>
             )}
@@ -266,7 +329,77 @@ export default function ConductorPanel() {
 
         {/* SAFE AREA */}
         <div style={{ height: 12, background: s.bg, flexShrink: 0 }}></div>
+        </div>
       </div>
+
+      {/* Modal Justificación Inicio Tardío */}
+      {mostrarModalTardio && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ background: '#111', padding: '24px', borderRadius: '16px', width: '100%', maxWidth: '340px', border: '1px solid #333', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+              <i className="bi bi-clock-history" style={{ color: s.amber, fontSize: '24px' }}></i>
+            </div>
+            <h3 style={{ color: 'white', marginTop: 0, marginBottom: '8px', fontSize: '18px' }}>Inicio fuera de horario</h3>
+            <p style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '20px', lineHeight: 1.5 }}>
+              Has iniciado la ruta fuera de tu franja horaria asignada. Por favor, ingresa el motivo del retraso para el reporte administrativo.
+            </p>
+            <textarea 
+              rows="3"
+              placeholder="Ej: Problemas mecánicos, tráfico pesado, etc." 
+              value={justificacionTardio} 
+              onChange={e => setJustificacionTardio(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#222', color: 'white', marginBottom: '20px', fontSize: '14px', fontFamily: 'inherit', resize: 'none' }} 
+            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => setMostrarModalTardio(false)} 
+                style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid #333', color: 'white', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancelar
+              </button>
+              <button 
+                disabled={!justificacionTardio.trim()}
+                onClick={() => iniciarRecorrido(justificacionTardio)} 
+                style={{ flex: 1, padding: '12px', background: s.amber, border: 'none', color: '#000', borderRadius: '8px', cursor: justificacionTardio.trim() ? 'pointer' : 'not-allowed', fontWeight: 700, opacity: justificacionTardio.trim() ? 1 : 0.5 }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL FINALIZAR RUTA */}
+      {mostrarModalFin && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#111', borderRadius: '16px', padding: '24px', width: '100%', border: `1px solid ${s.border}`, textAlign: 'center' }}>
+            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏁</div>
+            <h3 style={{ color: '#fff', fontSize: '20px', marginBottom: '8px' }}>¡Ruta Completada!</h3>
+            <p style={{ color: s.muted, fontSize: '14px', marginBottom: '20px' }}>
+              Has recorrido un total de <span style={{ color: s.green, fontWeight: 700 }}>{kmFinales} KM</span>. 
+              Por favor ingresa la carga recolectada para cerrar tu turno.
+            </p>
+
+            <div style={{ textAlign: 'left', marginBottom: '20px' }}>
+              <label style={{ display: 'block', color: '#fff', fontSize: '12px', marginBottom: '8px', fontWeight: 600 }}>TONELADAS RECOLECTADAS</label>
+              <input 
+                type="number"
+                step="0.1"
+                placeholder="Ej: 4.5"
+                value={toneladas}
+                onChange={(e) => setToneladas(e.target.value)}
+                style={{ width: '100%', background: '#000', border: `1px solid ${s.border}`, borderRadius: '10px', padding: '14px', color: '#fff', fontSize: '16px' }}
+              />
+            </div>
+
+            <button 
+              onClick={finalizarJornada}
+              style={{ width: '100%', padding: '16px', borderRadius: '10px', border: 'none', background: s.green, color: '#000', fontWeight: 800, cursor: 'pointer' }}
+            >
+              Finalizar y Reportar
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

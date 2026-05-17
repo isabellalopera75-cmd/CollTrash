@@ -4,7 +4,7 @@ let io;
 
 const iniciarSocket = (server) => {
   io = socketIo(server, {
-    cors: { origin: 'http://localhost:3001', methods: ['GET', 'POST'] }
+    cors: { origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'] }
   });
 
   io.on('connection', (socket) => {

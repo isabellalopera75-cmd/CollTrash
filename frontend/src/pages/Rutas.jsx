@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import API, { obtenerAsignaciones, reasignarAsignacion, obtenerConductores, obtenerVehiculos } from '../services/api';
+import API, { obtenerAsignaciones, reasignarAsignacion, obtenerConductores, obtenerVehiculos, habilitarInicioTardio } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
 
 export default function Rutas() {
@@ -15,6 +15,17 @@ export default function Rutas() {
   const [modalReasignar, setModalReasignar] = useState(false);
   const [asigAReasignar, setAsigAReasignar] = useState(null);
   const [formReasignar, setFormReasignar] = useState({ conductor_id: '', vehiculo_id: '' });
+
+  const stats = {
+    enCurso: asignaciones.filter(a => a.estado === 'activa').length,
+    pendientes: asignaciones.filter(a => a.estado === 'pendiente').length,
+    completadas: asignaciones.filter(a => a.estado === 'completada').length,
+    hoy: new Date().toISOString().split('T')[0]
+  };
+
+  const [modalReactivar, setModalReactivar] = useState(false);
+  const [asigAReactivar, setAsigAReactivar] = useState(null);
+  const [motivoReactivar, setMotivoReactivar] = useState('');
 
   // Generar los 6 días laborables de la vista superior (Saltando domingos)
   const diasVista = [];
@@ -77,6 +88,19 @@ export default function Rutas() {
       alert('Reasignación exitosa');
     } catch (error) {
       alert(error.response?.data?.mensaje || 'Error al reasignar');
+    }
+  };
+
+  const handleHabilitarTarde = async () => {
+    if (!motivoReactivar.trim()) return alert('Por favor ingresa un motivo');
+    try {
+      await API.put(`/asignaciones/${asigAReactivar.id}/reactivar`, { motivo: motivoReactivar });
+      setModalReactivar(false);
+      setMotivoReactivar('');
+      cargarAsignaciones();
+      alert('✅ Inicio tardío habilitado exitosamente');
+    } catch (e) {
+      alert('Error al habilitar');
     }
   };
 
@@ -145,13 +169,17 @@ export default function Rutas() {
 
       {/* Filtros de Estado */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '25px' }}>
-         <button className="btn" style={{ background: 'rgba(0, 255, 157, 0.1)', color: 'var(--color-primary)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: '1px solid rgba(0, 255, 157, 0.2)' }}>
+         <button className="btn" style={{ background: stats.enCurso > 0 ? 'rgba(0, 255, 157, 0.1)' : 'rgba(255,255,255,0.05)', color: stats.enCurso > 0 ? 'var(--color-primary)' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.enCurso > 0 ? '1px solid rgba(0, 255, 157, 0.2)' : '1px solid #333' }}>
            <i className="bi bi-truck" style={{ marginRight: '8px' }}></i>
-           1 En curso
+           {stats.enCurso} En curso
          </button>
-         <button className="btn" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: '1px solid #333' }}>
+         <button className="btn" style={{ background: stats.pendientes > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.05)', color: stats.pendientes > 0 ? 'var(--color-accent)' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.pendientes > 0 ? '1px solid rgba(245, 158, 11, 0.2)' : '1px solid #333' }}>
            <i className="bi bi-clock" style={{ marginRight: '8px' }}></i>
-           2 Pendientes
+           {stats.pendientes} Pendientes
+         </button>
+         <button className="btn" style={{ background: stats.completadas > 0 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.05)', color: stats.completadas > 0 ? '#3b82f6' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.completadas > 0 ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid #333' }}>
+           <i className="bi bi-check2-all" style={{ marginRight: '8px' }}></i>
+           {stats.completadas} Completadas
          </button>
       </div>
 
@@ -214,6 +242,39 @@ export default function Rutas() {
                       <button onClick={() => abrirModalReasignar(a)} className="btn" style={{ padding: '6px', background: 'none', color: '#666' }} title="Reasignar">
                         <i className="bi bi-arrow-left-right"></i>
                       </button>
+                       {a.estado === 'pendiente' && a.fecha.split('T')[0] === stats.hoy && (
+                         (() => {
+                            const [h, m] = (a.j_hora_inicio || '00:00:00').split(':');
+                            const [hf, mf] = (a.hora_limite_fin || '23:59:59').split(':');
+                            
+                            const ahora = new Date();
+                            const inicio = new Date();
+                            inicio.setHours(parseInt(h), parseInt(m), 0);
+                            
+                            const fin = new Date();
+                            fin.setHours(parseInt(hf), parseInt(mf), 0);
+
+                            const limiteReactivacion = new Date(inicio.getTime() + 60 * 60 * 1000);
+                            
+                            // Regla: Es tarde (pasó 1h) PERO aún no termina la jornada
+                            const esTarde = ahora > limiteReactivacion;
+                            const jornadaTerminada = ahora > fin;
+                            
+                            if (esTarde && !jornadaTerminada && !a.habilitado_por_admin) {
+                              return (
+                                <button 
+                                  onClick={() => { setAsigAReactivar(a); setModalReactivar(true); }}
+                                  className="btn" 
+                                  style={{ padding: '6px', background: 'none', color: 'var(--color-warning)' }} 
+                                  title="Reactivar Inicio (Tarde)"
+                                >
+                                  <i className="bi bi-lightning-fill"></i>
+                                </button>
+                              );
+                            }
+                            return null;
+                         })()
+                       )}
                       <button className="btn" style={{ padding: '6px', background: 'none', color: '#666' }} title="Ver Detalle">
                         <i className="bi bi-chevron-down"></i>
                       </button>
@@ -286,6 +347,33 @@ export default function Rutas() {
               </button>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Reactivación */}
+      {modalReactivar && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: '400px', border: '1px solid var(--color-warning)' }}>
+             <h3 style={{ fontSize: '18px', color: 'white', marginBottom: '15px' }}>
+               <i className="bi bi-lightning-charge-fill" style={{ color: 'var(--color-warning)', marginRight: '10px' }}></i>
+               Reactivar Inicio de Ruta
+             </h3>
+             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+               El conductor de la ruta <strong>{asigAReactivar?.ruta_nombre}</strong> excedió el tiempo límite (1 hora). 
+               Ingresa una breve justificación para habilitarle el botón de inicio manualmente.
+             </p>
+             <textarea 
+               className="card" 
+               style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', color: 'white', minHeight: '80px', border: 'none', marginBottom: '20px' }}
+               placeholder="Ej: Justificación comunicada vía telefónica..."
+               value={motivoReactivar}
+               onChange={e => setMotivoReactivar(e.target.value)}
+             />
+             <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => setModalReactivar(false)} className="btn" style={{ flex: 1 }}>Cancelar</button>
+                <button onClick={handleHabilitarTarde} className="btn btn-primary" style={{ flex: 1, background: 'var(--color-warning)', color: '#000' }}>Confirmar Habilitación</button>
+             </div>
           </div>
         </div>
       )}

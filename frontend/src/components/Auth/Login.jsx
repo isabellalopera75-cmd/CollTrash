@@ -131,19 +131,20 @@ export default function Login() {
             </div>
           )}
 
-          {/* Formulario o botón Google */}
+          {/* Formulario o botón Portal Ciudadano */}
           {esCiudadano ? (
             <div style={{ display: 'grid', gap: '12px' }}>
               <button
-                onClick={() => window.location.href = 'http://localhost:3000/api/auth/google'}
-                className="btn"
-                style={{ width: '100%', padding: '14px', background: 'white', color: '#333', gap: '12px', fontWeight: 600, fontSize: '14px', justifyContent: 'center' }}
+                type="button"
+                onClick={() => window.location.href = '/portal'}
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '16px', gap: '12px', fontWeight: 700, fontSize: '15px', justifyContent: 'center', borderRadius: '12px' }}
               >
-                <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" style={{ width: '18px' }} />
-                Continuar con Google
+                <i className="bi bi-person-check-fill" style={{ fontSize: '20px' }}></i>
+                Ingresar al Portal Ciudadano
               </button>
-              <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
-                Usamos tu cuenta de Google para identificarte de forma segura.
+              <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                Accede para consultar los horarios de tu barrio, realizar reportes ciudadanos y recibir seguimiento en vivo.
               </p>
             </div>
           ) : (

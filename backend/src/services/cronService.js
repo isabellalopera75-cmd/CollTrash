@@ -29,10 +29,21 @@ const generarAsignaciones = async (fechaInicio = null) => {
           );
 
           if (existe.rows.length === 0) {
-            await pool.query(
+            const nuevaAsig = await pool.query(
               `INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
-               VALUES ($1, $2, $3, $4, 'pendiente')`,
+               VALUES ($1, $2, $3, $4, 'pendiente') RETURNING id`,
               [ruta.id, ruta.conductor_default_id, ruta.vehiculo_id, fechaAsignacion]
+            );
+
+            const asigId = nuevaAsig.rows[0].id;
+
+            // VINCULAR LOS SECTORES DE LA RUTA A ESTA ASIGNACIÓN ESPECÍFICA
+            await pool.query(
+              `INSERT INTO sectores_asignacion (asignacion_id, sector_id, estado, porcentaje_recorrido)
+               SELECT $1, id, 'pendiente', 0
+               FROM sectores_ruta
+               WHERE ruta_fija_id = $2`,
+              [asigId, ruta.id]
             );
           }
         } else {

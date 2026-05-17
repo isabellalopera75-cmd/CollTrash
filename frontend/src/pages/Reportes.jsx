@@ -70,45 +70,60 @@ export default function Reportes() {
                 <i className="bi bi-check2-all" style={{ fontSize: '30px', display: 'block', marginBottom: '10px' }}></i>
                 No hay reportes pendientes
               </div>
-            ) : reportes.map(r => (
-              <div 
-                key={r.id} 
-                className={`card ${reporteSeleccionado?.id === r.id ? 'active' : ''}`}
-                style={{ 
-                  marginBottom: '10px', 
-                  cursor: 'pointer', 
-                  border: reporteSeleccionado?.id === r.id ? '1px solid var(--color-primary)' : '1px solid transparent',
-                  background: 'rgba(255,255,255,0.02)'
-                }}
-                onClick={() => handleVerDetalle(r)}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>
-                    <i className="bi bi-hash"></i>{r.id} • {new Date(r.created_at).toLocaleDateString()}
-                  </span>
-                  <span className={`status-badge status-warning`} style={{ fontSize: '9px' }}>PENDIENTE</span>
+            ) : reportes.map(r => {
+              const horas = (new Date() - new Date(r.created_at)) / (1000 * 60 * 60);
+              const expirado = r.estado === 'pendiente' && horas > 42;
+              let stClass = 'status-warning';
+              let stLabel = r.estado?.toUpperCase() || 'PENDIENTE';
+              if (expirado) { stClass = 'status-danger'; stLabel = 'EXPIRADO (>42H)'; }
+              else if (r.estado === 'en_proceso' || r.estado === 'resuelto') { stClass = 'status-success'; stLabel = 'ACEPTADO / AGENDADO'; }
+              else if (r.estado === 'rechazado') { stClass = 'status-danger'; stLabel = 'RECHAZADO'; }
+
+              return (
+                <div 
+                  key={r.id} 
+                  className={`card ${reporteSeleccionado?.id === r.id ? 'active' : ''}`}
+                  style={{ 
+                    marginBottom: '10px', 
+                    cursor: 'pointer', 
+                    border: reporteSeleccionado?.id === r.id ? '1px solid var(--color-primary)' : '1px solid transparent',
+                    background: 'rgba(255,255,255,0.02)'
+                  }}
+                  onClick={() => handleVerDetalle(r)}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>
+                      <i className="bi bi-hash"></i>{r.id} • {new Date(r.created_at).toLocaleDateString()}
+                    </span>
+                    <span className={`status-badge ${stClass}`} style={{ fontSize: '9px' }}>{stLabel}</span>
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '5px' }}>{r.nombre_ciudadano || 'Ciudadano Anónimo'} • <span style={{fontSize: '12px', color: 'var(--text-muted)'}}>{r.tipo_problema}</span></div>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.descripcion}
+                  </p>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '5px' }}>{r.nombre_ciudadano || 'Ciudadano Anónimo'}</div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.descripcion}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {reporteSeleccionado ? (
-            <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-               <div style={{ height: '300px', background: '#000' }}>
-                 <MapContainer center={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]} zoom={16} style={{ height: '100%' }}>
-                   <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-                   <Marker position={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]}>
-                        <Popup>Ubicación del reporte</Popup>
-                   </Marker>
-                 </MapContainer>
-               </div>
-               <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
+          {reporteSeleccionado ? (() => {
+            const horas = (new Date() - new Date(reporteSeleccionado.created_at)) / (1000 * 60 * 60);
+            const expirado = reporteSeleccionado.estado === 'pendiente' && horas > 42;
+            const yaProcesado = reporteSeleccionado.estado === 'en_proceso' || reporteSeleccionado.estado === 'rechazado' || reporteSeleccionado.estado === 'resuelto';
+
+            return (
+              <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ height: '300px', background: '#000' }}>
+                  <MapContainer center={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]} zoom={16} style={{ height: '100%' }}>
+                    <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                    <Marker position={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]}>
+                      <Popup>Ubicación del reporte</Popup>
+                    </Marker>
+                  </MapContainer>
+                </div>
+                <div style={{ padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
                     {reporteSeleccionado.foto_url && (
                       <img 
@@ -118,18 +133,39 @@ export default function Reportes() {
                       />
                     )}
                     <div>
-                      <h4 style={{ fontSize: '16px', color: 'white' }}>Descripción:</h4>
-                      <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '5px' }}>{reporteSeleccionado.descripcion}</p>
+                      <h4 style={{ fontSize: '16px', color: 'white', marginBottom: '4px' }}>{reporteSeleccionado.tipo_problema}</h4>
+                      <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{reporteSeleccionado.descripcion}</p>
+                      <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '8px' }}>Reportado por: {reporteSeleccionado.nombre_ciudadano}</div>
                     </div>
                   </div>
-                  
-                  <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
-                    <button onClick={() => { setAccion('aceptar'); setMostrarModal(true); }} className="btn btn-primary" style={{ flex: 1 }}>✅ Aceptar</button>
-                    <button onClick={() => { setAccion('rechazar'); setMostrarModal(true); }} className="btn" style={{ flex: 1, background: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', border: '1px solid #ff4444' }}>❌ Rechazar</button>
-                  </div>
-               </div>
-            </div>
-          ) : (
+
+                  {reporteSeleccionado.justificacion_rechazo && (
+                    <div style={{ padding: '12px', background: reporteSeleccionado.estado === 'rechazado' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0, 255, 157, 0.1)', border: reporteSeleccionado.estado === 'rechazado' ? '1px solid #EF4444' : '1px solid #00FF9D', borderRadius: '8px', marginBottom: '20px', fontSize: '13px' }}>
+                      <strong style={{ color: reporteSeleccionado.estado === 'rechazado' ? '#EF4444' : '#00FF9D' }}>
+                        {reporteSeleccionado.estado === 'rechazado' ? 'Motivo de rechazo: ' : 'Detalle de agenda: '}
+                      </strong>
+                      <span style={{ color: '#fff' }}>{reporteSeleccionado.justificacion_rechazo}</span>
+                    </div>
+                  )}
+
+                  {expirado && !yaProcesado ? (
+                    <div style={{ marginTop: 'auto', padding: '14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #EF4444', borderRadius: '8px', textAlign: 'center', color: '#EF4444', fontSize: '13px', fontWeight: 600 }}>
+                      ⚠️ Este reporte ha expirado al superar el límite de 42 horas sin ser atendido.
+                    </div>
+                  ) : !yaProcesado ? (
+                    <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+                      <button onClick={() => { setAccion('aceptar'); setMostrarModal(true); }} className="btn btn-primary" style={{ flex: 1 }}>✅ Aceptar y Agendar</button>
+                      <button onClick={() => { setAccion('rechazar'); setMostrarModal(true); }} className="btn" style={{ flex: 1, background: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', border: '1px solid #ff4444' }}>❌ Rechazar</button>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 'auto', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
+                      ✓ Este reporte ya fue gestionado.
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })() : (
             <div className="card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
               <div>
                 <i className="bi bi-search" style={{ fontSize: '40px', color: 'var(--text-muted)', display: 'block', marginBottom: '10px' }}></i>
@@ -140,41 +176,53 @@ export default function Reportes() {
         </div>
       </div>
 
-      {mostrarModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ width: '400px' }}>
-            <h3 style={{ marginBottom: '20px' }}>{accion === 'aceptar' ? 'Agendar Recogida' : 'Rechazar Reporte'}</h3>
-            
-            {accion === 'aceptar' ? (
-              <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Asignar a Ruta de Mañana/Tarde</label>
-                <select className="card" style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white' }} value={asignacionId} onChange={e => setAsignacionId(e.target.value)}>
-                  <option value="">Selecciona...</option>
-                  {rutas.map(r => (
-                    <option key={r.id} value={r.id}>{r.nombre}</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div>
-                <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Motivo del Rechazo</label>
-                <textarea 
-                  className="card" 
-                  style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white', minHeight: '100px' }}
-                  placeholder="Explica por qué no es necesario..."
-                  value={justificacion}
-                  onChange={e => setJustificacion(e.target.value)}
-                />
-              </div>
-            )}
+      {mostrarModal && (() => {
+        const mañana = new Date(); mañana.setDate(mañana.getDate() + 1);
+        const pasado = new Date(); pasado.setDate(pasado.getDate() + 2);
+        const opcionesDias = [
+          { fecha: mañana.toISOString().split('T')[0], label: `Mañana (${mañana.toLocaleDateString()})` },
+          { fecha: pasado.toISOString().split('T')[0], label: `Pasado mañana (${pasado.toLocaleDateString()})` }
+        ];
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
-              <button className="btn" style={{ flex: 1 }} onClick={() => setMostrarModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleProcesar}>Confirmar</button>
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="card" style={{ width: '400px' }}>
+              <h3 style={{ marginBottom: '20px' }}>{accion === 'aceptar' ? 'Agendar Recogida (Máx 2 días)' : 'Rechazar Reporte'}</h3>
+              
+              {accion === 'aceptar' ? (
+                <div>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Asignar a Ruta y Fecha</label>
+                  <select className="card" style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white' }} value={asignacionId} onChange={e => setAsignacionId(e.target.value)}>
+                    <option value="">Selecciona ruta y día...</option>
+                    {rutas.map(r => (
+                      <optgroup key={r.id} label={`${r.nombre}`}>
+                        <option value={`${r.id}_${opcionesDias[0].fecha}`}>{r.nombre} — {opcionesDias[0].label}</option>
+                        <option value={`${r.id}_${opcionesDias[1].fecha}`}>{r.nombre} — {opcionesDias[1].label}</option>
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Motivo del Rechazo (Visible para el ciudadano)</label>
+                  <textarea 
+                    className="card" 
+                    style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white', minHeight: '100px' }}
+                    placeholder="Explica de forma clara el motivo por el cual no se realizará la recolección..."
+                    value={justificacion}
+                    onChange={e => setJustificacion(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
+                <button className="btn" style={{ flex: 1 }} onClick={() => setMostrarModal(false)}>Cancelar</button>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleProcesar}>Confirmar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </AdminLayout>
   );
 }

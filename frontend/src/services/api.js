@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: 'http://localhost:3000/api'
+  baseURL: window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000/api' : '/api'
 });
 
 // Agregar token automáticamente a cada petición
@@ -10,6 +10,20 @@ API.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+// Capturar errores 401 (Token expirado o inválido) a nivel global
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Auth
 export const login = (data) => API.post('/auth/login', data);
@@ -41,6 +55,7 @@ export const reasignarAsignacion = (id, data) => API.put(`/asignaciones/${id}/re
 
 // Reportes ciudadanos
 export const obtenerReportes = () => API.get('/reportes');
+export const obtenerMisReportes = (ids) => API.get(`/reportes/mis-reportes?ids=${ids}`);
 export const actualizarEstadoReporte = (id, data) => API.put(`/reportes/${id}/estado`, data);
 export const atenderReporte = (id, data) => API.put(`/reportes/${id}/atender`, data);
 export const rechazarReporte = (id, data) => API.put(`/reportes/${id}/rechazar`, data);
@@ -54,6 +69,13 @@ export const detectarBarrio = (lat, lng) => API.get(`/barrios/detectar?lat=${lat
 export const dashboardDiario = () => API.get('/dashboard/diario');
 export const dashboardSemanal = () => API.get('/dashboard/semanal');
 export const dashboardMensual = () => API.get('/dashboard/mensual');
+export const obtenerReporteEficiencia = (inicio, fin) => API.get(`/dashboard/eficiencia?inicio=${inicio}&fin=${fin}`);
+export const obtenerNovedadesOperativas = () => API.get('/dashboard/novedades');
+
+// Notificaciones
+export const obtenerNotificaciones = () => API.get('/notificaciones');
+export const marcarNotificacionLeida = (id) => API.put(`/notificaciones/${id}/leer`);
+export const marcarTodasLeidas = () => API.put('/notificaciones/leer-todo');
 
 // Configuración
 export const obtenerConfig = () => API.get('/config');

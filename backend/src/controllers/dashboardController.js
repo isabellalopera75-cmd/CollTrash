@@ -2,7 +2,10 @@ const pool = require('../config/database');
 
 const dashboardDiario = async (req, res) => {
   try {
-    const hoy = new Date().toISOString().split('T')[0];
+    // Usar fecha local (Colombia) en lugar de UTC para evitar desfases nocturnos
+    const ahora = new Date();
+    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
+    const hoy = ahora.toISOString().split('T')[0];
 
     const rutas = await pool.query(
       `SELECT 
@@ -102,4 +105,64 @@ const dashboardMensual = async (req, res) => {
   }
 };
 
-module.exports = { dashboardDiario, dashboardSemanal, dashboardMensual };
+const reporteEficiencia = async (req, res) => {
+  try {
+    const { inicio, fin } = req.query;
+    
+    const query = `
+      SELECT 
+        a.id,
+        a.fecha,
+        rf.nombre AS ruta_nombre,
+        u.nombre AS conductor_nombre,
+        v.placa AS vehiculo_placa,
+        e.toneladas,
+        e.km_recorridos,
+        e.tiempo_minutos,
+        e.porcentaje_cumplimiento,
+        e.num_descargas
+      FROM eficiencia_rutas e
+      JOIN asignaciones_semanales a ON a.id = e.asignacion_id
+      JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+      JOIN usuarios u ON u.id = a.conductor_id
+      JOIN vehiculos v ON v.id = a.vehiculo_id
+      WHERE a.fecha BETWEEN $1 AND $2
+      ORDER BY a.fecha DESC
+    `;
+    
+    const resultado = await pool.query(query, [
+      inicio || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+      fin || new Date().toISOString().split('T')[0]
+    ]);
+
+    res.status(200).json({ reportes: resultado.rows });
+  } catch (error) {
+    console.error('Error en reporteEficiencia:', error.message);
+    res.status(500).json({ mensaje: 'Error al generar reporte.' });
+  }
+};
+
+const obtenerNovedadesOperativas = async (req, res) => {
+  try {
+    const resultado = await pool.query(
+      `SELECT n.*, u.nombre AS admin_nombre, rf.nombre AS ruta_nombre, a.fecha AS fecha_asignacion
+       FROM novedades_operativas n
+       JOIN usuarios u ON u.id = n.admin_id
+       JOIN asignaciones_semanales a ON a.id = n.asignacion_id
+       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+       ORDER BY n.fecha DESC LIMIT 100`
+    );
+    res.json({ novedades: resultado.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al obtener novedades' });
+  }
+};
+
+module.exports = { 
+  dashboardDiario, 
+  dashboardSemanal, 
+  dashboardMensual, 
+  reporteEficiencia,
+  obtenerNovedadesOperativas
+};

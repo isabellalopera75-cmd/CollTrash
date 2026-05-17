@@ -23,6 +23,7 @@ export default function Sidebar() {
         { path: '/puntos-descarga', label: 'Puntos de Descarga', icon: 'bi bi-pin-map-fill' },
         { path: '/conductores', label: 'Conductores', icon: 'bi bi-person-badge-fill' },
         { path: '/vehiculos', label: 'Vehículos', icon: 'bi bi-truck' },
+        { path: '/reportes-operativos', label: 'Reportes Operativos', icon: 'bi bi-file-earmark-bar-graph-fill' },
       ]
     },
     {

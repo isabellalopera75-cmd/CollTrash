@@ -1,4 +1,6 @@
 const pool = require('../config/database');
+const { startSimulation } = require('../services/simuladorService');
+const { crearNotificacion } = require('../services/notificacionService');
 
 // Conductor ve sus rutas de la semana
 const misRutas = async (req, res) => {
@@ -15,7 +17,7 @@ const misRutas = async (req, res) => {
       `SELECT a.*, rf.nombre AS ruta_nombre,
               j.nombre AS jornada_nombre,
               j.hora_inicio, j.hora_limite_fin,
-              v.placa
+              v.placa, a.habilitado_por_admin
        FROM asignaciones_semanales a
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
        JOIN jornadas j ON j.id = rf.jornada_id
@@ -54,7 +56,7 @@ const iniciarRuta = async (req, res) => {
       return res.status(400).json({ mensaje: 'La ruta no está en estado pendiente.' });
     }
 
-    // Verificar hora de inicio
+    const { justificacion } = req.body;
     const ahora = new Date();
     const jornada = await pool.query(
       'SELECT j.* FROM jornadas j JOIN rutas_fijas rf ON rf.jornada_id = j.id WHERE rf.id = $1',
@@ -68,25 +70,77 @@ const iniciarRuta = async (req, res) => {
 
     const diffMinutos = (ahora - horaInicio) / 60000;
     const inicioTardio = diffMinutos > j.margen_tardio_min;
+    const bloqueoTotal = diffMinutos > 60; // 1 hora de retraso
+
+    const [hf, mf] = j.hora_limite_fin.split(':');
+    const horaFin = new Date();
+    horaFin.setHours(parseInt(hf), parseInt(mf), 0);
+
+    // REGLA 1: Si ya pasó la hora de FIN de la jornada, NO SE PUEDE INICIAR
+    if (ahora > horaFin) {
+      return res.status(403).json({ 
+        bloqueado: true,
+        mensaje: '❌ JORNADA EXPIRADA: Esta ruta ya superó su horario de finalización. No es posible iniciarla.' 
+      });
+    }
+
+    // REGLA 2: Si pasó más de 1 hora y NO ha sido habilitado por admin, BLOQUEAR
+    if (bloqueoTotal && !a.habilitado_por_admin) {
+      // NOTIFICAR ADMIN: Intento de inicio bloqueado
+      await crearNotificacion({
+        titulo: '🚨 Inicio Bloqueado (Muy Tarde)',
+        mensaje: `El conductor ${req.usuario.nombre} intentó iniciar la ruta "${a.ruta_nombre}" con más de 1 hora de retraso. Se requiere tu autorización manual.`,
+        tipo: 'urgente',
+        metadata: { asignacion_id: id, tipo: 'BLOQUEO_INICIO' }
+      });
+
+      return res.status(403).json({ 
+        bloqueado: true,
+        mensaje: '❌ TIEMPO LÍMITE EXCEDIDO: Has superado el tiempo permitido para iniciar la ruta (1 hora). Contacta al administrador para que habilite tu inicio manualmente.' 
+      });
+    }
+
+    // Si es tarde (pero menos de 1h o ya habilitado) y no hay justificación, pedirla
+    if (inicioTardio && !justificacion && !a.habilitado_por_admin) {
+      return res.status(200).json({ 
+        requiere_justificacion: true, 
+        mensaje: 'Estás iniciando fuera de tu horario habitual. Por favor, indica el motivo.' 
+      });
+    }
+
+    const asigId = parseInt(id);
 
     await pool.query(
       `UPDATE asignaciones_semanales 
-       SET estado = 'activa', hora_inicio_real = NOW(), inicio_tardio = $1
-       WHERE id = $2`,
-      [inicioTardio, id]
+       SET estado = 'activa', hora_inicio_real = NOW(), inicio_tardio = $1, justificacion_tardio = $2
+       WHERE id = $3`,
+      [inicioTardio, justificacion || null, asigId]
     );
 
-    // Activar primer sector
+    // Activar primer sector (si existe)
     await pool.query(
       `UPDATE sectores_asignacion SET estado = 'en_progreso'
        WHERE asignacion_id = $1 AND sector_id = (
-         SELECT sr.id FROM sectores_ruta sr
-         JOIN sectores_asignacion sa ON sa.sector_id = sr.id
-         WHERE sa.asignacion_id = $1
+         SELECT sa.sector_id 
+         FROM sectores_asignacion sa
+         JOIN sectores_ruta sr ON sr.id = sa.sector_id
+         WHERE sa.asignacion_id = $2
          ORDER BY sr.orden ASC LIMIT 1
        )`,
-      [id]
+      [asigId, asigId]
     );
+
+    // NOTIFICAR ADMIN: Inicio de ruta
+    await crearNotificacion({
+      titulo: inicioTardio ? '⚠️ Inicio Tardío' : '🚛 Ruta Iniciada',
+      mensaje: `El conductor ${req.usuario.nombre || 'Conductor'} ha iniciado la ruta "${a.ruta_nombre || 'Sin nombre'}".${inicioTardio ? ' (Inicio fuera de horario)' : ''}`,
+      tipo: inicioTardio ? 'urgente' : 'operativo',
+      metadata: { asignacion_id: asigId, tipo: 'INICIO_RUTA' }
+    });
+
+    // Iniciar el simulador en el backend
+    console.log('🔄 Llamando startSimulation...');
+    startSimulation(asigId);
 
     res.status(200).json({
       mensaje: inicioTardio ? 'Ruta iniciada con inicio tardío.' : 'Ruta iniciada correctamente.',
@@ -94,8 +148,12 @@ const iniciarRuta = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error:', error.message);
-    res.status(500).json({ mensaje: 'Error interno del servidor.' });
+    console.error('❌ ERROR CRÍTICO en iniciarRuta:', error);
+    res.status(500).json({ 
+      mensaje: 'Error interno del servidor.', 
+      error: error.message,
+      stack: error.stack 
+    });
   }
 };
 
@@ -279,10 +337,18 @@ const finalizarRuta = async (req, res) => {
 
     await pool.query(
       `INSERT INTO eficiencia_rutas 
-       (asignacion_id, toneladas, tiempo_minutos, sectores_completados, sectores_totales, porcentaje_cumplimiento, num_descargas)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, toneladas, tiempoMinutos, completados, total, porcentaje, parseInt(numDescargas.rows[0].count)]
+       (asignacion_id, toneladas, tiempo_minutos, sectores_completados, sectores_totales, porcentaje_cumplimiento, num_descargas, km_recorridos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, toneladas, tiempoMinutos, completados, total, porcentaje, parseInt(numDescargas.rows[0].count), a.km_recorridos]
     );
+
+    // NOTIFICAR ADMIN: Fin de ruta
+    await crearNotificacion({
+      titulo: '✅ Ruta Finalizada',
+      mensaje: `La ruta "${a.ruta_nombre || 'Sin nombre'}" ha sido completada con un ${porcentaje}% de cumplimiento.`,
+      tipo: 'operativo',
+      metadata: { asignacion_id: id, tipo: 'FIN_RUTA' }
+    });
 
     res.status(200).json({ mensaje: 'Ruta finalizada exitosamente.', porcentaje_cumplimiento: porcentaje });
   } catch (error) {
