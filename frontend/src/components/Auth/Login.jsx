@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -17,6 +17,14 @@ export default function Login() {
   const [cargando, setCargando] = useState(false);
   const { setUsuario } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const prevBg = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = '#0D1017';
+    return () => {
+      document.body.style.backgroundColor = prevBg;
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,6 +70,9 @@ export default function Login() {
       justifyContent: 'center',
       background: 'var(--bg-global)',
       padding: '20px',
+      paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))',
+      paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+      boxSizing: 'border-box',
       backgroundImage: 'radial-gradient(ellipse at 50% 0%, color-mix(in oklch, var(--color-primary), transparent 92%) 0%, transparent 60%)',
     }}>
       <div style={{ width: '100%', maxWidth: '460px' }}>
