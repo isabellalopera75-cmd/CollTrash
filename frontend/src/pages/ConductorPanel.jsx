@@ -184,7 +184,7 @@ export default function ConductorPanel() {
         <div className="cp-container">
 
         {/* STATUS BAR */}
-        <div style={{ background: '#050505', padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ background: '#050505', padding: 'calc(6px + env(safe-area-inset-top, 0px)) 16px 6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: s.green }}>
             <span className="dot-pulsar" style={{ width: 7, height: 7, borderRadius: '50%', background: s.green, display: 'inline-block' }}></span>
             {iniciado ? 'En ruta' : 'Listo'}
@@ -328,7 +328,7 @@ export default function ConductorPanel() {
         )}
 
         {/* SAFE AREA */}
-        <div style={{ height: 12, background: s.bg, flexShrink: 0 }}></div>
+        <div style={{ height: 'calc(12px + env(safe-area-inset-bottom, 0px))', background: s.bg, flexShrink: 0 }}></div>
         </div>
       </div>
 

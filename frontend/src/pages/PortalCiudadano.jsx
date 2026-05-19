@@ -160,7 +160,7 @@ export default function PortalCiudadano() {
   return (
     <div className="pc-wrapper">
       <div className="pc-container">
-        <div style={{ padding: '16px', borderBottom: '1px solid #1F242F', backgroundColor: '#0A0D14', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) 16px 16px 16px', borderBottom: '1px solid #1F242F', backgroundColor: '#0A0D14', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'rgba(0, 255, 157, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00FF9D' }}>
               <Home size={20} />
