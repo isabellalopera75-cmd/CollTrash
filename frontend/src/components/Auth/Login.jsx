@@ -41,11 +41,11 @@ export default function Login() {
       // Validar que el rol coincida con la pestaña seleccionada
       if (usuario.rol !== rolSeleccionado) {
         setError(`Esta cuenta no es de tipo "${roles.find(r => r.key === rolSeleccionado)?.label}". Selecciona el rol correcto.`);
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         return;
       }
 
-      localStorage.setItem('token', res.data.token);
+      sessionStorage.setItem('token', res.data.token);
       setUsuario(usuario);
 
       if (usuario.rol === 'conductor') {

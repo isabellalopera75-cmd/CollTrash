@@ -67,12 +67,18 @@ export default function PortalCiudadano() {
 
     const localZona = localStorage.getItem('pc_zona');
     const localBarrio = localStorage.getItem('pc_barrio');
-    if (localZona) {
+    const token = sessionStorage.getItem('token');
+    
+    if (localZona && token) {
       setZona(localZona);
       if (localBarrio) setBarrioReal(localBarrio);
       setOnboarding("done");
+      cargarMisReportes();
+    } else {
+      // Si no hay token, asegurarse de que no pase al dashboard
+      setOnboarding("auth");
+      sessionStorage.removeItem('token');
     }
-    cargarMisReportes();
 
     return () => {
       document.body.style.backgroundColor = prevBg;
@@ -88,12 +94,8 @@ export default function PortalCiudadano() {
     });
 
     socket.on('reporte_actualizado', (updatedReport) => {
-      let rawIds = JSON.parse(localStorage.getItem('pc_mis_reportes') || '[]');
-      let validIds = rawIds.map(id => typeof id === 'object' ? id?.id : Number(id)).filter(id => !isNaN(id) && id > 0);
-      
-      if (validIds.includes(updatedReport.id)) {
-        cargarMisReportes();
-      }
+      // Re-fetch all reports for this citizen since we don't have local IDs anymore
+      cargarMisReportes();
     });
 
     return () => socket.disconnect();
@@ -101,20 +103,8 @@ export default function PortalCiudadano() {
 
   const cargarMisReportes = async () => {
     try {
-      let rawIds = JSON.parse(localStorage.getItem('pc_mis_reportes') || '[]');
-      // Filtrar para que sean solo números válidos y limpiar si se guardó basura antes
-      let validIds = rawIds.map(id => typeof id === 'object' ? id?.id : Number(id)).filter(id => !isNaN(id) && id > 0);
-      
-      if (validIds.length !== rawIds.length) {
-        localStorage.setItem('pc_mis_reportes', JSON.stringify(validIds));
-      }
-
-      if (validIds.length > 0) {
-        const res = await obtenerMisReportes(validIds.join(','));
-        setMisReportes(res.data.reportes);
-      } else {
-        setMisReportes([]);
-      }
+      const res = await obtenerMisReportes();
+      setMisReportes(res.data.reportes);
     } catch (error) {
       console.error('Error al cargar mis reportes:', error);
       setMisReportes([]);
@@ -127,10 +117,11 @@ export default function PortalCiudadano() {
     localStorage.setItem('pc_zona', z);
     localStorage.setItem('pc_barrio', bNombre);
     setOnboarding("done");
+    cargarMisReportes();
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     localStorage.removeItem('pc_zona');
     localStorage.removeItem('pc_barrio');
     localStorage.removeItem('pc_user_email');
@@ -140,12 +131,6 @@ export default function PortalCiudadano() {
   };
 
   const agregarReporte = (nuevoReporte) => {
-    const idNum = typeof nuevoReporte === 'object' ? nuevoReporte.id : nuevoReporte;
-    const ids = JSON.parse(localStorage.getItem('pc_mis_reportes') || '[]');
-    if (idNum && !ids.includes(idNum)) {
-      ids.unshift(idNum);
-      localStorage.setItem('pc_mis_reportes', JSON.stringify(ids));
-    }
     cargarMisReportes();
     setTab("mis-reportes");
   };
@@ -251,7 +236,7 @@ function OnboardingAuth({ onNext }) {
             email: email.trim().toLowerCase(),
             password: password.trim()
           });
-          localStorage.setItem('token', res.data.token);
+          sessionStorage.setItem('token', res.data.token);
           localStorage.setItem("pc_user_email", res.data.usuario.email);
           localStorage.setItem("pc_user_nombre", res.data.usuario.nombre);
           onNext();
@@ -270,7 +255,7 @@ function OnboardingAuth({ onNext }) {
             return;
           }
           
-          localStorage.setItem('token', res.data.token);
+          sessionStorage.setItem('token', res.data.token);
           localStorage.setItem("pc_user_email", res.data.usuario.email);
           localStorage.setItem("pc_user_nombre", res.data.usuario.nombre);
           onNext();

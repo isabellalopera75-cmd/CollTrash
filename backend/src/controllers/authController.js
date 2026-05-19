@@ -39,7 +39,6 @@ const login = async (req, res) => {
       return res.status(401).json({ mensaje: 'Credenciales incorrectas.' });
     }
 
-    const usuario = resultado.rows[0];
 
     // Verificar contraseña
     const passwordValida = await bcrypt.compare(password, usuario.password_hash);
@@ -215,10 +214,19 @@ const editarConductor = async (req, res) => {
 // Obtener perfil del usuario autenticado
 const obtenerPerfil = async (req, res) => {
   try {
-    const resultado = await pool.query(
-      'SELECT id, nombre, email, rol, created_at FROM usuarios WHERE id = $1',
-      [req.usuario.id]
-    );
+    let resultado;
+    
+    if (req.usuario.rol === 'ciudadano') {
+      resultado = await pool.query(
+        'SELECT id, nombre, email, \'ciudadano\' as rol, created_at FROM ciudadanos WHERE id = $1',
+        [req.usuario.id]
+      );
+    } else {
+      resultado = await pool.query(
+        'SELECT id, nombre, email, rol, created_at FROM usuarios WHERE id = $1',
+        [req.usuario.id]
+      );
+    }
 
     if (resultado.rows.length === 0) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado.' });

@@ -170,16 +170,11 @@ const actualizarEstado = async (req, res) => {
 };
 
 const obtenerMisReportes = async (req, res) => {
-  const { ids } = req.query; // '1,2,3'
-  if (!ids) return res.status(200).json({ reportes: [] });
+  const ciudadanoId = req.usuario.id;
   try {
-    const idArray = ids.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
-    if (idArray.length === 0) return res.status(200).json({ reportes: [] });
-
-    const placeholders = idArray.map((_, i) => `$${i + 1}`).join(',');
     const resultado = await pool.query(
-      `SELECT * FROM reportes_ciudadanos WHERE id IN (${placeholders}) ORDER BY created_at DESC`,
-      idArray
+      `SELECT * FROM reportes_ciudadanos WHERE ciudadano_id = $1 ORDER BY created_at DESC`,
+      [ciudadanoId]
     );
     res.status(200).json({ reportes: resultado.rows });
   } catch (error) {

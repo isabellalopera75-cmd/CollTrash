@@ -6,7 +6,7 @@ const API = axios.create({
 
 // Agregar token automáticamente a cada petición
 API.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -16,9 +16,12 @@ API.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      if (window.location.pathname !== '/login') {
+      sessionStorage.removeItem('token');
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/portal') {
         window.location.href = '/login';
+      }
+      if (window.location.pathname === '/portal') {
+        window.location.reload();
       }
     }
     return Promise.reject(error);
@@ -57,7 +60,7 @@ export const reasignarAsignacion = (id, data) => API.put(`/asignaciones/${id}/re
 
 // Reportes ciudadanos
 export const obtenerReportes = () => API.get('/reportes');
-export const obtenerMisReportes = (ids) => API.get(`/reportes/mis-reportes?ids=${ids}`);
+export const obtenerMisReportes = () => API.get('/reportes/mis-reportes');
 export const actualizarEstadoReporte = (id, data) => API.put(`/reportes/${id}/estado`, data);
 export const atenderReporte = (id, data) => API.put(`/reportes/${id}/atender`, data);
 export const rechazarReporte = (id, data) => API.put(`/reportes/${id}/rechazar`, data);
