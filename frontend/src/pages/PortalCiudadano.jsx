@@ -61,6 +61,10 @@ export default function PortalCiudadano() {
   const [misReportes, setMisReportes] = useState([]);
 
   useEffect(() => {
+    // Set body background to match citizen app background for status bar blending
+    const prevBg = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = '#0A0D14';
+
     const localZona = localStorage.getItem('pc_zona');
     const localBarrio = localStorage.getItem('pc_barrio');
     if (localZona) {
@@ -69,6 +73,10 @@ export default function PortalCiudadano() {
       setOnboarding("done");
     }
     cargarMisReportes();
+
+    return () => {
+      document.body.style.backgroundColor = prevBg;
+    };
   }, []);
 
   useEffect(() => {

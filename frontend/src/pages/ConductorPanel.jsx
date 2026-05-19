@@ -32,6 +32,9 @@ export default function ConductorPanel() {
   const [kmFinales, setKmFinales] = useState(0);
 
   useEffect(() => { 
+    const prevBg = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = '#0a0a0a';
+
     const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
     socketRef.current = io(socketUrl);
     cargar(); 
@@ -40,6 +43,7 @@ export default function ConductorPanel() {
       clearInterval(timerRef.current); 
       if (window.emitIntervalRef) clearInterval(window.emitIntervalRef);
       if (socketRef.current) socketRef.current.disconnect();
+      document.body.style.backgroundColor = prevBg;
     }; 
   }, []);
 
