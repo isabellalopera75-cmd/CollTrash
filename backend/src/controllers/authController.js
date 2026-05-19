@@ -15,12 +15,27 @@ const login = async (req, res) => {
     }
 
     // Buscar usuario en BD
-    const resultado = await pool.query(
+    let resultado = await pool.query(
       'SELECT * FROM usuarios WHERE email = $1 AND activo = TRUE',
       [email]
     );
 
-    if (resultado.rows.length === 0) {
+    let usuario = null;
+    let rolFijo = null;
+
+    if (resultado.rows.length > 0) {
+      usuario = resultado.rows[0];
+      rolFijo = usuario.rol;
+    } else {
+      // Buscar en ciudadanos
+      resultado = await pool.query('SELECT * FROM ciudadanos WHERE email = $1', [email]);
+      if (resultado.rows.length > 0) {
+        usuario = resultado.rows[0];
+        rolFijo = 'ciudadano';
+      }
+    }
+
+    if (!usuario) {
       return res.status(401).json({ mensaje: 'Credenciales incorrectas.' });
     }
 
@@ -32,9 +47,8 @@ const login = async (req, res) => {
       return res.status(401).json({ mensaje: 'Credenciales incorrectas.' });
     }
 
-    // Generar token JWT
     const token = jwt.sign(
-      { id: usuario.id, email: usuario.email, rol: usuario.rol, nombre: usuario.nombre },
+      { id: usuario.id, email: usuario.email, rol: rolFijo, nombre: usuario.nombre },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
@@ -46,7 +60,7 @@ const login = async (req, res) => {
         id: usuario.id,
         nombre: usuario.nombre,
         email: usuario.email,
-        rol: usuario.rol
+        rol: rolFijo
       }
     });
 
@@ -218,4 +232,57 @@ const obtenerPerfil = async (req, res) => {
   }
 };
 
-module.exports = { login, registrarConductor, editarConductor, obtenerPerfil };
+// Registrar ciudadano
+const registrarCiudadano = async (req, res) => {
+  const { nombre, email, password, barrio_id } = req.body;
+
+  try {
+    if (!nombre || !email || !password) {
+      return res.status(400).json({ mensaje: 'Nombre, email y contraseña son obligatorios.' });
+    }
+
+    // Verificar si el email ya existe en usuarios o ciudadanos
+    const existeUsuario = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+    if (existeUsuario.rows.length > 0) {
+      return res.status(400).json({ mensaje: 'El correo electrónico ya está registrado en el sistema.' });
+    }
+
+    const existeCiudadano = await pool.query('SELECT id FROM ciudadanos WHERE email = $1', [email]);
+    if (existeCiudadano.rows.length > 0) {
+      return res.status(400).json({ mensaje: 'El correo electrónico ya está registrado como ciudadano.' });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    const resultado = await pool.query(
+      `INSERT INTO ciudadanos (nombre, email, password_hash, barrio_id) 
+       VALUES ($1, $2, $3, $4) RETURNING id, nombre, email`,
+      [nombre, email, hash, barrio_id || null]
+    );
+
+    const ciudadano = resultado.rows[0];
+
+    // Generar token para autologueo
+    const token = jwt.sign(
+      { id: ciudadano.id, email: ciudadano.email, rol: 'ciudadano', nombre: ciudadano.nombre },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
+
+    res.status(201).json({
+      mensaje: 'Ciudadano registrado exitosamente.',
+      token,
+      usuario: {
+        id: ciudadano.id,
+        nombre: ciudadano.nombre,
+        email: ciudadano.email,
+        rol: 'ciudadano'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error al registrar ciudadano:', error.message);
+    res.status(500).json({ mensaje: 'Error interno del servidor al registrar ciudadano.' });
+  }
+};
+
+module.exports = { login, registrarConductor, editarConductor, obtenerPerfil, registrarCiudadano };

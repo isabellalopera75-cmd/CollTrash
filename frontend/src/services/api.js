@@ -27,6 +27,7 @@ API.interceptors.response.use(
 
 // Auth
 export const login = (data) => API.post('/auth/login', data);
+export const registrarCiudadano = (data) => API.post('/auth/registrar-ciudadano', data);
 export const registrarConductor = (data) => API.post('/auth/registrar-conductor', data);
 export const editarConductor = (id, data) => API.put(`/auth/conductor/${id}`, data);
 export const obtenerPerfil = () => API.get('/auth/perfil');

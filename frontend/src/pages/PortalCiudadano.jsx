@@ -7,7 +7,7 @@ import {
   X, ImagePlus, LocateFixed, Loader2
 } from 'lucide-react';
 import io from 'socket.io-client';
-import { crearReporteCiudadano, obtenerMisReportes, obtenerBarrios, verificarCorreo } from '../services/api';
+import { crearReporteCiudadano, obtenerMisReportes, obtenerBarrios, verificarCorreo, login, registrarCiudadano } from '../services/api';
 
 const barriosPorZona = {
   "centro": {
@@ -130,6 +130,7 @@ export default function PortalCiudadano() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
     localStorage.removeItem('pc_zona');
     localStorage.removeItem('pc_barrio');
     localStorage.removeItem('pc_user_email');
@@ -153,7 +154,7 @@ export default function PortalCiudadano() {
     return (
       <div className="pc-wrapper">
         <div className="pc-container">
-          {onboarding === "google" && <OnboardingGoogle onNext={() => setOnboarding("ubicacion")} />}
+          {onboarding === "google" && <OnboardingAuth onNext={() => setOnboarding("ubicacion")} />}
           {onboarding === "ubicacion" && <OnboardingUbicacion onNext={() => setOnboarding("confirmacion")} onManual={() => setOnboarding("manual")} setZona={(z) => {setZona(z); setBarrioReal("Barrio Centro");}} />}
           {onboarding === "manual" && <OnboardingManual onNext={() => setOnboarding("confirmacion")} setZona={setZona} setBarrioReal={setBarrioReal} onBack={() => setOnboarding("ubicacion")} />}
           {onboarding === "confirmacion" && <OnboardingConfirmacion zona={zona} barrioReal={barrioReal} onFinish={() => handleFinishOnboarding(zona, barrioReal)} />}
@@ -213,23 +214,13 @@ function NavItem({ active, icon, label, onClick }) {
 
 // ── ONBOARDING COMPONENTS ───────────────────────────────────────
 
-function OnboardingGoogle({ onNext }) {
-  const [mode, setMode] = useState("select");
+function OnboardingAuth({ onNext }) {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [nombre, setNombre] = useState("");
   const [password, setPassword] = useState("");
   const [tabMode, setTabMode] = useState("register"); // "register" or "login"
   const [errorMsg, setErrorMsg] = useState("");
-
-  const handleGoogle = () => {
-    setLoading(true);
-    setTimeout(() => {
-      localStorage.setItem("pc_user_email", "ciudadano.google@gmail.com");
-      localStorage.setItem("pc_user_nombre", "Ciudadano");
-      onNext();
-    }, 1200);
-  };
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
@@ -250,71 +241,48 @@ function OnboardingGoogle({ onNext }) {
       console.error("Error al verificar correo con el backend:", err);
     }
 
-    setTimeout(() => {
-      let registeredUsers = JSON.parse(localStorage.getItem("pc_registered_users") || "[]");
-      
-      // Seed a default test account if empty
-      if (registeredUsers.length === 0) {
-        registeredUsers.push({
-          nombre: "Usuario Prueba",
-          email: "test@colltrash.co",
-          password: "123"
-        });
-        localStorage.setItem("pc_registered_users", JSON.stringify(registeredUsers));
-      }
-
       if (tabMode === "register") {
-        const existe = registeredUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase());
-        if (existe) {
-          setErrorMsg("Este correo ya se encuentra registrado. Intenta iniciar sesión.");
-          setLoading(false);
-          return;
-        }
-
         const nom = nombre.trim() || email.split("@")[0];
         const nomCapitalizado = nom.charAt(0).toUpperCase() + nom.slice(1);
         
-        const newUser = {
-          nombre: nomCapitalizado,
-          email: email.trim().toLowerCase(),
-          password: password.trim()
-        };
-        
-        registeredUsers.push(newUser);
-        localStorage.setItem("pc_registered_users", JSON.stringify(registeredUsers));
-        
-        localStorage.setItem("pc_user_email", newUser.email);
-        localStorage.setItem("pc_user_nombre", newUser.nombre);
-        setLoading(false);
-        onNext();
-      } else {
-        const user = registeredUsers.find(u => 
-          u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password.trim()
-        );
-        
-        if (!user) {
-          setErrorMsg("Correo o contraseña incorrectos. Verifica tus datos.");
-          setLoading(false);
-          return;
+        try {
+          const res = await registrarCiudadano({
+            nombre: nomCapitalizado,
+            email: email.trim().toLowerCase(),
+            password: password.trim()
+          });
+          localStorage.setItem('token', res.data.token);
+          localStorage.setItem("pc_user_email", res.data.usuario.email);
+          localStorage.setItem("pc_user_nombre", res.data.usuario.nombre);
+          onNext();
+        } catch (err) {
+          setErrorMsg(err.response?.data?.mensaje || 'Error al registrar ciudadano.');
         }
-
-        localStorage.setItem("pc_user_email", user.email);
-        localStorage.setItem("pc_user_nombre", user.nombre);
-        setLoading(false);
-        onNext();
+      } else {
+        try {
+          const res = await login({
+            email: email.trim().toLowerCase(),
+            password: password.trim()
+          });
+          
+          if (res.data.usuario.rol !== 'ciudadano') {
+            setErrorMsg('Esta cuenta no pertenece a un ciudadano.');
+            return;
+          }
+          
+          localStorage.setItem('token', res.data.token);
+          localStorage.setItem("pc_user_email", res.data.usuario.email);
+          localStorage.setItem("pc_user_nombre", res.data.usuario.nombre);
+          onNext();
+        } catch (err) {
+          setErrorMsg(err.response?.data?.mensaje || 'Correo o contraseña incorrectos.');
+        }
       }
-    }, 1200);
+      setLoading(false);
   };
 
-  if (mode === "email") {
-    return (
+  return (
       <div className="pc-centered" style={{ padding: '24px 16px' }}>
-        <button 
-          onClick={() => setMode("select")} 
-          style={{ background: 'none', border: 'none', color: '#8C95A6', fontSize: '13px', cursor: 'pointer', alignSelf: 'flex-start', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          ← Volver a opciones
-        </button>
 
         <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: 'rgba(0, 255, 157, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: '#00FF9D' }}>
           <User size={28} />
@@ -404,45 +372,10 @@ function OnboardingGoogle({ onNext }) {
         </form>
 
         <p style={{ fontSize: '11px', color: '#8C95A6', marginTop: '24px', textAlign: 'center' }}>
-          {tabMode === 'register' ? 'Tus reportes quedarán vinculados de forma segura a esta cuenta.' : '💡 Puedes probar con: test@colltrash.co y contraseña: 123'}
+          Tus reportes quedarán vinculados de forma segura a esta cuenta.
         </p>
       </div>
     );
-  }
-
-  return (
-    <div className="pc-centered">
-      <div style={{ width: '64px', height: '64px', borderRadius: '16px', backgroundColor: 'rgba(0, 255, 157, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--pc-primary)' }}>
-        <Truck size={32} />
-      </div>
-      <h1 className="pc-title">Bienvenido a CollTrash</h1>
-      <p className="pc-subtitle">Mantén tu ciudad limpia y organizada.</p>
-      
-      <div className="pc-card">
-        <p style={{ fontSize: '14px', marginBottom: '24px', textAlign: 'center' }}>Inicia sesión para poder reportar incidentes y ver tus horarios personalizados.</p>
-        <button className="pc-btn-google" onClick={handleGoogle} disabled={loading}>
-          {loading ? <Loader2 className="animate-spin-custom" size={20} /> : (
-            <svg width="20" height="20" viewBox="0 0 48 48">
-              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.73 17.74 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            </svg>
-          )}
-          {loading ? "Conectando..." : "Continuar con Google"}
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', margin: '16px 0', color: 'var(--pc-text-muted)' }}>
-          <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--pc-border)' }}></div>
-          <span style={{ fontSize: '10px', padding: '0 8px', textTransform: 'uppercase' }}>o</span>
-          <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--pc-border)' }}></div>
-        </div>
-        <button className="pc-btn-secondary" onClick={() => setMode("email")}>
-          <User size={18} /> Registrar con correo y contraseña
-        </button>
-      </div>
-      <p style={{ fontSize: '10px', color: 'var(--pc-text-muted)', marginTop: '24px', textAlign: 'center' }}>Al continuar aceptas nuestros términos y condiciones de uso.</p>
-    </div>
-  );
 }
 
 function OnboardingUbicacion({ onNext, onManual, setZona }) {

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { login, registrarConductor, editarConductor, obtenerPerfil } = require('../controllers/authController');
+const { login, registrarConductor, editarConductor, obtenerPerfil, registrarCiudadano } = require('../controllers/authController');
 const { verificarToken, soloAdmin } = require('../middlewares/authMiddleware');
 const passport = require('../config/passport');
 const jwt = require('jsonwebtoken');
@@ -15,7 +15,7 @@ router.get('/verificar-correo', async (req, res) => {
   try {
     const pool = require('../config/database');
     const resultado = await pool.query(
-      'SELECT id, rol FROM usuarios WHERE email = $1',
+      'SELECT id, rol, email FROM usuarios WHERE email = $1 UNION SELECT id, \'ciudadano\' as rol, email FROM ciudadanos WHERE email = $1',
       [email.trim().toLowerCase()]
     );
     if (resultado.rows.length > 0) {
@@ -40,28 +40,8 @@ router.put('/conductor/:id', verificarToken, soloAdmin, editarConductor);
 // GET /api/auth/perfil
 router.get('/perfil', verificarToken, obtenerPerfil);
 
-// GET /api/auth/google
-router.get('/google', passport.authenticate('google', {
-  scope: ['profile', 'email']
-}));
-
-// GET /api/auth/google/callback
-router.get('/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login-failed', session: false }),
-  (req, res) => {
-    const token = jwt.sign(
-      { id: req.user.id, email: req.user.email, nombre: req.user.nombre, rol: 'ciudadano' },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
-    
-    // Redirigimos al frontend con el token
-    // Si tienes un nuevo link de localhost.run, ponlo aquí abajo:
-    const frontendURL = 'http://localhost:3001/portal'; 
-      
-    res.redirect(`${frontendURL}?token=${token}`);
-  }
-);
+// POST /api/auth/registrar-ciudadano
+router.post('/registrar-ciudadano', registrarCiudadano);
 
 // GET /api/auth/conductores (solo admin)
 router.get('/conductores', verificarToken, soloAdmin, async (req, res) => {
