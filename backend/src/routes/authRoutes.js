@@ -6,6 +6,28 @@ const passport = require('../config/passport');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
+// GET /api/auth/verificar-correo
+router.get('/verificar-correo', async (req, res) => {
+  const { email } = req.query;
+  if (!email) {
+    return res.status(400).json({ mensaje: 'Email es requerido.' });
+  }
+  try {
+    const pool = require('../config/database');
+    const resultado = await pool.query(
+      'SELECT id, rol FROM usuarios WHERE email = $1',
+      [email.trim().toLowerCase()]
+    );
+    if (resultado.rows.length > 0) {
+      return res.json({ existe: true, rol: resultado.rows[0].rol });
+    }
+    return res.json({ existe: false });
+  } catch (error) {
+    console.error('Error al verificar correo:', error.message);
+    return res.status(500).json({ mensaje: 'Error al verificar correo.' });
+  }
+});
+
 // POST /api/auth/login
 router.post('/login', login);
 

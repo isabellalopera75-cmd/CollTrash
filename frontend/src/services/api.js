@@ -30,6 +30,7 @@ export const login = (data) => API.post('/auth/login', data);
 export const registrarConductor = (data) => API.post('/auth/registrar-conductor', data);
 export const editarConductor = (id, data) => API.put(`/auth/conductor/${id}`, data);
 export const obtenerPerfil = () => API.get('/auth/perfil');
+export const verificarCorreo = (email) => API.get(`/auth/verificar-correo?email=${email}`);
 
 // Rutas
 export const obtenerRutas = () => API.get('/rutas');

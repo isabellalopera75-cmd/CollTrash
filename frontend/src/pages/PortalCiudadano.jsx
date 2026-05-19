@@ -7,7 +7,7 @@ import {
   X, ImagePlus, LocateFixed, Loader2
 } from 'lucide-react';
 import io from 'socket.io-client';
-import { crearReporteCiudadano, obtenerMisReportes, obtenerBarrios } from '../services/api';
+import { crearReporteCiudadano, obtenerMisReportes, obtenerBarrios, verificarCorreo } from '../services/api';
 
 const barriosPorZona = {
   "centro": {
@@ -223,11 +223,24 @@ function OnboardingGoogle({ onNext }) {
     }, 1200);
   };
 
-  const handleEmailSubmit = (e) => {
+  const handleEmailSubmit = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) return;
     setLoading(true);
     setErrorMsg("");
+
+    try {
+      // 1. Verificar si el correo pertenece a un conductor o administrador registrado en el backend
+      const checkRes = await verificarCorreo(email.trim());
+      if (checkRes.data.existe) {
+        const rolLabel = checkRes.data.rol === 'conductor' ? 'un conductor' : 'un administrador';
+        setErrorMsg(`Este correo pertenece a ${rolLabel} del sistema y no puede ser usado aquí.`);
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      console.error("Error al verificar correo con el backend:", err);
+    }
 
     setTimeout(() => {
       let registeredUsers = JSON.parse(localStorage.getItem("pc_registered_users") || "[]");
