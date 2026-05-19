@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { crearNotificacion } = require('../services/notificacionService');
+const { getIo } = require('../config/socket');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
@@ -71,6 +72,12 @@ const atenderReporte = async (req, res) => {
       return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
     }
 
+    // Emitir por Socket.io en tiempo real
+    const io = getIo();
+    if (io) {
+      io.emit('reporte_actualizado', reporte.rows[0]);
+    }
+
     // Si tiene email de ciudadano, intentamos notificar
     const ciudadano = await pool.query(
       'SELECT email, nombre FROM ciudadanos WHERE id = $1',
@@ -103,6 +110,12 @@ const rechazarReporte = async (req, res) => {
       `UPDATE reportes_ciudadanos SET estado = 'rechazado', justificacion_rechazo = $1 WHERE id = $2 RETURNING *`,
       [justificacion, id]
     );
+
+    // Emitir por Socket.io en tiempo real
+    const io = getIo();
+    if (io) {
+      io.emit('reporte_actualizado', resultado.rows[0]);
+    }
 
     res.status(200).json({ mensaje: 'Reporte rechazado.', reporte: resultado.rows[0] });
   } catch (error) {
@@ -141,6 +154,12 @@ const actualizarEstado = async (req, res) => {
 
     if (resultado.rows.length === 0) {
       return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
+    }
+
+    // Emitir por Socket.io en tiempo real
+    const io = getIo();
+    if (io) {
+      io.emit('reporte_actualizado', resultado.rows[0]);
     }
 
     res.status(200).json({ mensaje: 'Estado de reporte actualizado.', reporte: resultado.rows[0] });

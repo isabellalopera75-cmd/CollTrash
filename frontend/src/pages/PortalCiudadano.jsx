@@ -6,6 +6,7 @@ import {
   XCircle, Info, Recycle, Leaf, Flame, Navigation, User,
   X, ImagePlus, LocateFixed, Loader2
 } from 'lucide-react';
+import io from 'socket.io-client';
 import { crearReporteCiudadano, obtenerMisReportes, obtenerBarrios } from '../services/api';
 
 const barriosPorZona = {
@@ -68,6 +69,26 @@ export default function PortalCiudadano() {
       setOnboarding("done");
     }
     cargarMisReportes();
+  }, []);
+
+  useEffect(() => {
+    const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
+    const socket = io(socketUrl);
+
+    socket.on('connect', () => {
+      console.log('🔌 Socket conectado en PortalCiudadano');
+    });
+
+    socket.on('reporte_actualizado', (updatedReport) => {
+      let rawIds = JSON.parse(localStorage.getItem('pc_mis_reportes') || '[]');
+      let validIds = rawIds.map(id => typeof id === 'object' ? id?.id : Number(id)).filter(id => !isNaN(id) && id > 0);
+      
+      if (validIds.includes(updatedReport.id)) {
+        cargarMisReportes();
+      }
+    });
+
+    return () => socket.disconnect();
   }, []);
 
   const cargarMisReportes = async () => {
@@ -158,7 +179,7 @@ export default function PortalCiudadano() {
         <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
         {tab === "inicio" && <TabInicio barrio={barrio} onChangeTab={setTab} />}
         {tab === "horarios" && <TabHorarios barrio={barrio} />}
-        {tab === "reportar" && <TabReportar onEnviado={agregarReporte} />}
+        {tab === "reportar" && <TabReportar onEnviado={agregarReporte} barrioReal={barrioReal} />}
         {tab === "mis-reportes" && <TabMisReportes reportes={misReportes} />}
       </div>
 
@@ -190,6 +211,8 @@ function OnboardingGoogle({ onNext }) {
   const [email, setEmail] = useState("");
   const [nombre, setNombre] = useState("");
   const [password, setPassword] = useState("");
+  const [tabMode, setTabMode] = useState("register"); // "register" or "login"
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleGoogle = () => {
     setLoading(true);
@@ -204,12 +227,61 @@ function OnboardingGoogle({ onNext }) {
     e.preventDefault();
     if (!email.trim() || !password.trim()) return;
     setLoading(true);
+    setErrorMsg("");
+
     setTimeout(() => {
-      localStorage.setItem("pc_user_email", email.trim());
-      const nom = nombre.trim() || email.split("@")[0];
-      const nomCapitalizado = nom.charAt(0).toUpperCase() + nom.slice(1);
-      localStorage.setItem("pc_user_nombre", nomCapitalizado);
-      onNext();
+      let registeredUsers = JSON.parse(localStorage.getItem("pc_registered_users") || "[]");
+      
+      // Seed a default test account if empty
+      if (registeredUsers.length === 0) {
+        registeredUsers.push({
+          nombre: "Usuario Prueba",
+          email: "test@colltrash.co",
+          password: "123"
+        });
+        localStorage.setItem("pc_registered_users", JSON.stringify(registeredUsers));
+      }
+
+      if (tabMode === "register") {
+        const existe = registeredUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase());
+        if (existe) {
+          setErrorMsg("Este correo ya se encuentra registrado. Intenta iniciar sesión.");
+          setLoading(false);
+          return;
+        }
+
+        const nom = nombre.trim() || email.split("@")[0];
+        const nomCapitalizado = nom.charAt(0).toUpperCase() + nom.slice(1);
+        
+        const newUser = {
+          nombre: nomCapitalizado,
+          email: email.trim().toLowerCase(),
+          password: password.trim()
+        };
+        
+        registeredUsers.push(newUser);
+        localStorage.setItem("pc_registered_users", JSON.stringify(registeredUsers));
+        
+        localStorage.setItem("pc_user_email", newUser.email);
+        localStorage.setItem("pc_user_nombre", newUser.nombre);
+        setLoading(false);
+        onNext();
+      } else {
+        const user = registeredUsers.find(u => 
+          u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password.trim()
+        );
+        
+        if (!user) {
+          setErrorMsg("Correo o contraseña incorrectos. Verifica tus datos.");
+          setLoading(false);
+          return;
+        }
+
+        localStorage.setItem("pc_user_email", user.email);
+        localStorage.setItem("pc_user_nombre", user.nombre);
+        setLoading(false);
+        onNext();
+      }
     }, 1200);
   };
 
@@ -226,21 +298,46 @@ function OnboardingGoogle({ onNext }) {
         <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: 'rgba(0, 255, 157, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: '#00FF9D' }}>
           <User size={28} />
         </div>
-        <h1 className="pc-title" style={{ fontSize: '22px', marginBottom: '8px' }}>Registro por Correo</h1>
-        <p className="pc-subtitle" style={{ marginBottom: '28px', fontSize: '13px' }}>Ingresa tus datos para habilitar tus reportes ciudadanos.</p>
+        
+        {/* Toggle between Register and Login */}
+        <div style={{ display: 'flex', gap: '8px', width: '100%', marginBottom: '20px', padding: '4px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid var(--pc-border)' }}>
+          <button 
+            type="button" 
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: tabMode === 'register' ? 'var(--pc-primary)' : 'transparent', color: tabMode === 'register' ? '#000' : '#8C95A6', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}
+            onClick={() => { setTabMode('register'); setErrorMsg(''); }}
+          >
+            Registrarse
+          </button>
+          <button 
+            type="button" 
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: tabMode === 'login' ? 'var(--pc-primary)' : 'transparent', color: tabMode === 'login' ? '#000' : '#8C95A6', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}
+            onClick={() => { setTabMode('login'); setErrorMsg(''); }}
+          >
+            Iniciar Sesión
+          </button>
+        </div>
+
+        <h1 className="pc-title" style={{ fontSize: '22px', marginBottom: '8px' }}>
+          {tabMode === 'register' ? 'Registro por Correo' : 'Iniciar Sesión'}
+        </h1>
+        <p className="pc-subtitle" style={{ marginBottom: '20px', fontSize: '13px' }}>
+          {tabMode === 'register' ? 'Ingresa tus datos para habilitar tus reportes ciudadanos.' : 'Ingresa tus credenciales para acceder a tu portal.'}
+        </p>
 
         <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ textAlign: 'left' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#8C95A6', marginBottom: '6px' }}>NOMBRE O APODO (OPCIONAL)</label>
-            <input 
-              type="text" 
-              className="pc-input" 
-              placeholder="Ej: Carlos" 
-              value={nombre} 
-              onChange={e => setNombre(e.target.value)} 
-              style={{ width: '100%', boxSizing: 'border-box' }}
-            />
-          </div>
+          {tabMode === "register" && (
+            <div style={{ textAlign: 'left' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#8C95A6', marginBottom: '6px' }}>NOMBRE O APODO (OPCIONAL)</label>
+              <input 
+                type="text" 
+                className="pc-input" 
+                placeholder="Ej: Carlos" 
+                value={nombre} 
+                onChange={e => setNombre(e.target.value)} 
+                style={{ width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+          )}
 
           <div style={{ textAlign: 'left' }}>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#8C95A6', marginBottom: '6px' }}>CORREO ELECTRÓNICO *</label>
@@ -268,6 +365,12 @@ function OnboardingGoogle({ onNext }) {
             />
           </div>
 
+          {errorMsg && (
+            <div style={{ padding: '10px 12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: 'var(--pc-status-danger)', fontSize: '12px', fontWeight: 500, textAlign: 'center' }}>
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
           <button 
             type="submit" 
             disabled={loading || !email.trim() || !password.trim()}
@@ -275,11 +378,13 @@ function OnboardingGoogle({ onNext }) {
             style={{ marginTop: '12px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
           >
             {loading ? <Loader2 className="animate-spin-custom" size={20} /> : null}
-            {loading ? "Registrando cuenta..." : "Continuar al siguiente paso"}
+            {loading ? (tabMode === "register" ? "Registrando cuenta..." : "Iniciando sesión...") : (tabMode === "register" ? "Continuar al siguiente paso" : "Iniciar sesión y continuar")}
           </button>
         </form>
 
-        <p style={{ fontSize: '11px', color: '#8C95A6', marginTop: '24px', textAlign: 'center' }}>Tus reportes quedarán vinculados de forma segura a esta cuenta.</p>
+        <p style={{ fontSize: '11px', color: '#8C95A6', marginTop: '24px', textAlign: 'center' }}>
+          {tabMode === 'register' ? 'Tus reportes quedarán vinculados de forma segura a esta cuenta.' : '💡 Puedes probar con: test@colltrash.co y contraseña: 123'}
+        </p>
       </div>
     );
   }
@@ -631,30 +736,66 @@ function TabHorarios({ barrio }) {
   );
 }
 
-function TabReportar({ onEnviado }) {
+function TabReportar({ onEnviado, barrioReal }) {
   const [step, setStep] = useState("form");
-  const [nombre, setNombre] = useState("");
+  const [nombre, setNombre] = useState(() => localStorage.getItem("pc_user_nombre") || "");
   const [tipo, setTipo] = useState(null);
   const [modoUbicacion, setModoUbicacion] = useState("gps");
-  const [ubicacionGPS, setUbicacionGPS] = useState(null);
+  const [ubicacionGPS, setUbicacionGPS] = useState(() => barrioReal ? `Barrio ${barrioReal}, Neiva (Ubicación registrada)` : null);
   const [detectando, setDetectando] = useState(false);
   const [direccionManual, setDireccionManual] = useState("");
   const [foto, setFoto] = useState(null);
+  const [fotoPreview, setFotoPreview] = useState(null);
   const [desc, setDesc] = useState("");
   const [enviando, setEnviando] = useState(false);
+  
+  const fileInputRef = React.useRef(null);
 
   const photoRequired = tipo !== null && tipo !== 0 && tipo !== 5;
-  const isValid = nombre.length >= 2 && tipo !== null && (modoUbicacion === 'gps' ? ubicacionGPS : direccionManual.length > 3) && (!photoRequired || foto);
 
   const handleDetectGPS = () => {
     setDetectando(true);
     setTimeout(() => {
-      setUbicacionGPS("Cra 5 # 12-34, Barrio Centro (Detectado)");
+      setUbicacionGPS(`Cra 5 # 12-34, Barrio ${barrioReal || 'Centro'} (Detectado)`);
       setDetectando(false);
     }, 1800);
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setFoto(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFotoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleEnviar = async () => {
+    // Validaciones explícitas para indicar qué campo falta completar
+    if (!nombre.trim() || nombre.trim().length < 2) {
+      alert("⚠️ Falta completar: Por favor, escribe tu nombre completo (mínimo 2 letras).");
+      return;
+    }
+    if (tipo === null) {
+      alert("⚠️ Falta completar: Por favor, selecciona el tipo de problema.");
+      return;
+    }
+    if (modoUbicacion === 'gps' && !ubicacionGPS) {
+      alert("⚠️ Falta completar: Por favor, detecta tu ubicación GPS o escribe la dirección manualmente.");
+      return;
+    }
+    if (modoUbicacion === 'manual' && direccionManual.trim().length < 4) {
+      alert("⚠️ Falta completar: Por favor, escribe la dirección del problema.");
+      return;
+    }
+    if (photoRequired && !foto) {
+      alert(`⚠️ Falta completar: Se requiere una foto de evidencia para el problema "${tiposReporte[tipo]}".`);
+      return;
+    }
+
     setEnviando(true);
     try {
       const data = {
@@ -663,7 +804,7 @@ function TabReportar({ onEnviado }) {
         latitud: 2.9273, // Coordenadas fijas por ahora para simulación
         longitud: -75.2819,
         descripcion: modoUbicacion === 'gps' ? ubicacionGPS : direccionManual,
-        foto_url: foto ? 'evidencia_img.jpg' : null
+        foto_url: fotoPreview || 'evidencia_img.jpg' // Enviamos el base64 real si está disponible
       };
       
       const res = await crearReporteCiudadano(data);
@@ -780,22 +921,39 @@ function TabReportar({ onEnviado }) {
         <label className="pc-label">
           Foto del problema <span style={{fontWeight: 400, color: photoRequired ? 'var(--pc-status-danger)' : 'var(--pc-text-muted)'}}>{photoRequired ? '*' : '(opcional)'}</span>
         </label>
+        
+        {/* Hidden Camera Input */}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          accept="image/*" 
+          capture="environment" 
+          style={{ display: 'none' }} 
+          onChange={handleFileChange} 
+        />
+
         {foto ? (
           <div style={{ backgroundColor: 'rgba(0,255,157,0.1)', border: '1px solid rgba(0,255,157,0.3)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--pc-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-              <Camera size={18} />
-            </div>
+            {fotoPreview ? (
+              <img src={fotoPreview} alt="Vista previa" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--pc-border)' }} />
+            ) : (
+              <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: 'var(--pc-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                <Camera size={18} />
+              </div>
+            )}
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--pc-text-foreground)' }}>evidencia_img.jpg</div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--pc-text-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
+                {foto.name || 'Captura de cámara.jpg'}
+              </div>
               <div style={{ fontSize: '11px', color: 'var(--pc-primary)' }}>Foto adjuntada correctamente</div>
             </div>
-            <X size={16} color="var(--pc-text-muted)" style={{ cursor: 'pointer' }} onClick={() => setFoto(null)} />
+            <X size={16} color="var(--pc-text-muted)" style={{ cursor: 'pointer' }} onClick={() => { setFoto(null); setFotoPreview(null); }} />
           </div>
         ) : (
-          <div style={{ border: '1px dashed var(--pc-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: 'var(--pc-bg-card)' }} onClick={() => setFoto(true)}>
+          <div style={{ border: '1px dashed var(--pc-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: 'var(--pc-bg-card)', transition: 'border-color 0.2s' }} onClick={() => fileInputRef.current?.click()}>
             <ImagePlus size={24} color="var(--pc-text-muted)" />
             <div style={{ fontSize: '13px', fontWeight: 600 }}>Adjuntar foto</div>
-            <div style={{ fontSize: '11px', color: 'var(--pc-text-muted)' }}>Tomar foto o elegir de galería</div>
+            <div style={{ fontSize: '11px', color: 'var(--pc-text-muted)' }}>Tomar foto con la cámara o subir de la galería</div>
           </div>
         )}
       </div>
@@ -805,7 +963,7 @@ function TabReportar({ onEnviado }) {
         <textarea className="pc-textarea" placeholder="Escribe detalles adicionales aquí..." value={desc} onChange={e => setDesc(e.target.value)}></textarea>
       </div>
 
-      <button className="pc-btn-primary" disabled={!isValid || enviando} onClick={handleEnviar}>
+      <button className="pc-btn-primary" disabled={enviando} onClick={handleEnviar}>
         {enviando ? <Loader2 className="animate-spin-custom" size={20} /> : <Send size={20} />}
         {enviando ? "Enviando..." : "Enviar reporte al administrador"}
       </button>
