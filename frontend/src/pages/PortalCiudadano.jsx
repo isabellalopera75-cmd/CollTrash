@@ -976,9 +976,9 @@ function TabMisReportes({ reportes }) {
                 <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'var(--pc-bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--pc-text-muted)', flexShrink: 0 }}>
                   <MessageSquareWarning size={20} />
                 </div>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8f9fa' }}>{tipo}</div>
-                  <div style={{ fontSize: '12px', color: '#8C95A6', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '260px' }}>{dir}</div>
+                  <div style={{ fontSize: '12px', color: '#8C95A6', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
                     <span style={{ color: '#8C95A6' }}>{date}</span>
                     <span style={{ color: '#8C95A6' }}>·</span>
