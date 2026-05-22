@@ -12,6 +12,8 @@ export default function Reportes() {
   const [accion, setAccion] = useState(''); // 'aceptar' o 'rechazar'
   const [justificacion, setJustificacion] = useState('');
   const [asignacionId, setAsignacionId] = useState('');
+  const [asignacionesPorFecha, setAsignacionesPorFecha] = useState({});
+  const [cargandoAsignaciones, setCargandoAsignaciones] = useState(false);
   const [asignacionesDisponibles, setAsignacionesDisponibles] = useState([]);
   const [cargando, setCargando] = useState(true);
 
