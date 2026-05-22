@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { obtenerReportes, actualizarEstadoReporte, obtenerRutas, getAssetUrl } from '../services/api';
+import { obtenerReportes, actualizarEstadoReporte, obtenerAsignaciones, getAssetUrl } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -12,7 +12,7 @@ export default function Reportes() {
   const [accion, setAccion] = useState(''); // 'aceptar' o 'rechazar'
   const [justificacion, setJustificacion] = useState('');
   const [asignacionId, setAsignacionId] = useState('');
-  const [rutas, setRutas] = useState([]);
+  const [asignacionesDisponibles, setAsignacionesDisponibles] = useState([]);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => { cargarReportes(); }, []);
@@ -28,22 +28,30 @@ export default function Reportes() {
   const handleVerDetalle = async (reporte) => {
     setReporteSeleccionado(reporte);
     try {
-      const res = await obtenerRutas();
-      setRutas(res.data.rutas || []);
+      const mañana = new Date(); mañana.setDate(mañana.getDate() + 1);
+      const pasado = new Date(); pasado.setDate(pasado.getDate() + 2);
+      
+      const resMañana = await obtenerAsignaciones(mañana.toISOString().split('T')[0]);
+      const resPasado = await obtenerAsignaciones(pasado.toISOString().split('T')[0]);
+      
+      setAsignacionesDisponibles([
+        ...(resMañana.data.asignaciones || []),
+        ...(resPasado.data.asignaciones || [])
+      ]);
     } catch (e) { console.error(e); }
   };
 
   const handleProcesar = async () => {
     if (accion === 'rechazar' && !justificacion) return alert('Por favor escribe un motivo');
-    if (accion === 'aceptar' && !asignacionId) return alert('Selecciona una ruta para la recogida');
+    if (accion === 'aceptar' && !asignacionId) return alert('Selecciona una asignación para la recogida');
 
     try {
       await actualizarEstadoReporte(reporteSeleccionado.id, {
         estado: accion === 'aceptar' ? 'en_proceso' : 'rechazado',
         justificacion_rechazo: justificacion,
-        ruta_id: asignacionId // En un sistema real se buscaría la asignación específica
+        asignacion_semanal_id: asignacionId // Guarda la ID de la asignación real
       });
-      alert(accion === 'aceptar' ? '✅ Reporte aceptado. Se notificará al ciudadano.' : '❌ Reporte rechazado. Se notificará al ciudadano.');
+      alert(accion === 'aceptar' ? '✅ Reporte aceptado y agendado.' : '❌ Reporte rechazado. Se notificará al ciudadano.');
       setMostrarModal(false);
       setReporteSeleccionado(null);
       cargarReportes();
@@ -177,13 +185,6 @@ export default function Reportes() {
       </div>
 
       {mostrarModal && (() => {
-        const mañana = new Date(); mañana.setDate(mañana.getDate() + 1);
-        const pasado = new Date(); pasado.setDate(pasado.getDate() + 2);
-        const opcionesDias = [
-          { fecha: mañana.toISOString().split('T')[0], label: `Mañana (${mañana.toLocaleDateString()})` },
-          { fecha: pasado.toISOString().split('T')[0], label: `Pasado mañana (${pasado.toLocaleDateString()})` }
-        ];
-
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div className="card" style={{ width: '400px' }}>
@@ -193,12 +194,14 @@ export default function Reportes() {
                 <div>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Asignar a Ruta y Fecha</label>
                   <select className="card" style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white' }} value={asignacionId} onChange={e => setAsignacionId(e.target.value)}>
-                    <option value="">Selecciona ruta y día...</option>
-                    {rutas.map(r => (
-                      <optgroup key={r.id} label={`${r.nombre}`}>
-                        <option value={`${r.id}_${opcionesDias[0].fecha}`}>{r.nombre} — {opcionesDias[0].label}</option>
-                        <option value={`${r.id}_${opcionesDias[1].fecha}`}>{r.nombre} — {opcionesDias[1].label}</option>
-                      </optgroup>
+                    <option value="">Selecciona asignación programada...</option>
+                    {asignacionesDisponibles.length === 0 && (
+                      <option disabled>No hay rutas programadas para mañana ni pasado</option>
+                    )}
+                    {asignacionesDisponibles.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.ruta_nombre} — {new Date(a.fecha).toLocaleDateString()}
+                      </option>
                     ))}
                   </select>
                 </div>
