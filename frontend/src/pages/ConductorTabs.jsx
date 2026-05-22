@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import API from '../services/api';
+import API, { getAssetUrl } from '../services/api';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
 import { useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -12,7 +12,7 @@ function MapCenterer({ center }) {
 }
 
 // ─── Tab Ruta ────────────────────────────────────────────────
-export function TabRuta({ paradas, posicion, asignacion }) {
+export function TabRuta({ paradas, posicion, asignacion, reportesCiudadanos = [] }) {
   const activa = paradas.find(p => p.estado === 'en_curso') || paradas.find(p => p.estado === 'pendiente');
   const centro = posicion || [2.9273, -75.2819];
   
@@ -53,6 +53,39 @@ export function TabRuta({ paradas, posicion, asignacion }) {
             );
           })}
 
+          {/* Reportes Ciudadanos Asignados */}
+          {reportesCiudadanos.filter(r => r.estado === 'en_proceso').map(r => (
+            <CircleMarker 
+              key={`reporte-${r.id}`} 
+              center={[parseFloat(r.latitud), parseFloat(r.longitud)]} 
+              radius={10} 
+              color="#ffffff" 
+              weight={2.5} 
+              fillColor="#ef4444" 
+              fillOpacity={1}
+            >
+              <Popup>
+                <div style={{ color: 'white', fontFamily: 'Inter, sans-serif', padding: '2px' }}>
+                  <strong style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                    🚨 Reporte Ciudadano
+                  </strong>
+                  <div style={{ fontWeight: 700, fontSize: '13px', margin: '6px 0 2px 0' }}>{r.tipo_problema}</div>
+                  <div style={{ fontSize: '11px', color: '#ccc', lineHeight: '1.4' }}>{r.descripcion}</div>
+                  {r.nombre_ciudadano && <div style={{ fontSize: '10px', color: '#999', marginTop: '6px' }}>Reportado por: {r.nombre_ciudadano}</div>}
+                  {r.foto_url && (
+                    <div style={{ marginTop: '8px' }}>
+                      <img 
+                        src={getAssetUrl(r.foto_url)} 
+                        alt="Evidencia" 
+                        style={{ width: '100%', maxHeight: '80px', objectFit: 'cover', borderRadius: '4px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </Popup>
+            </CircleMarker>
+          ))}
+
           {posicion && (
             <CircleMarker center={posicion} radius={12} color="#F59E0B" weight={3} fillColor="#F59E0B" fillOpacity={0.4}>
               <Popup>🚛 Tu posición</Popup>
@@ -74,58 +107,132 @@ export function TabRuta({ paradas, posicion, asignacion }) {
 }
 
 // ─── Tab Paradas ─────────────────────────────────────────────
-export function TabParadas({ paradas, onCompletar, completando }) {
+export function TabParadas({ paradas, onCompletar, completando, reportesCiudadanos = [], onResolverReporte }) {
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {paradas.map(p => {
-        const completada = p.estado === 'completado';
-        const activa = p.estado === 'en_curso';
-        return (
-          <div key={p.id} style={{
-            padding: '14px',
-            borderRadius: '12px',
-            background: completada ? 'rgba(34,197,94,0.06)' : activa ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.04)',
-            border: `1px solid ${completada ? 'rgba(34,197,94,0.2)' : activa ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'}`,
-            display: 'flex', alignItems: 'center', gap: '12px'
-          }}>
-            {/* Ícono estado */}
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-              background: completada ? 'rgba(34,197,94,0.2)' : activa ? 'rgba(245,158,11,0.2)' : 'rgba(107,114,128,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px'
-            }}>
-              {completada ? <i className="bi bi-check-lg" style={{ color: '#22c55e' }}></i>
-                : activa ? <i className="bi bi-clock-fill" style={{ color: '#F59E0B' }}></i>
-                : <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280' }}>{p.orden}</span>}
-            </div>
-
-            {/* Info */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: '13px', color: completada ? '#9ca3af' : 'white', textDecoration: completada ? 'line-through' : 'none' }}>
-                {p.nombre}
-              </div>
-              {completada && p.completado_at && (
-                <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
-                  ✓ {new Date(p.completado_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+    <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* SECCIÓN 1: PARADAS OFICIALES */}
+      <div>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#22c55e', letterSpacing: '1px', marginBottom: '10px' }}>
+          📍 PARADAS OFICIALES DE LA RUTA
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {paradas.map(p => {
+            const completada = p.estado === 'completado';
+            const activa = p.estado === 'en_curso';
+            return (
+              <div key={p.id} style={{
+                padding: '14px',
+                borderRadius: '12px',
+                background: completada ? 'rgba(34,197,94,0.06)' : activa ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${completada ? 'rgba(34,197,94,0.2)' : activa ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                display: 'flex', alignItems: 'center', gap: '12px'
+              }}>
+                {/* Ícono estado */}
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                  background: completada ? 'rgba(34,197,94,0.2)' : activa ? 'rgba(245,158,11,0.2)' : 'rgba(107,114,128,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px'
+                }}>
+                  {completada ? <i className="bi bi-check-lg" style={{ color: '#22c55e' }}></i>
+                    : activa ? <i className="bi bi-clock-fill" style={{ color: '#F59E0B' }}></i>
+                    : <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280' }}>{p.orden}</span>}
                 </div>
-              )}
-              {activa && <div style={{ fontSize: '11px', color: '#F59E0B', marginTop: '2px' }}>En curso</div>}
-              {!completada && !activa && <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>Pendiente</div>}
-            </div>
 
-            {/* Botón completar */}
-            {activa && (
-              <button
-                onClick={() => onCompletar(p.id)}
-                disabled={completando}
-                style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#000', fontWeight: 700, fontSize: '12px', cursor: completando ? 'wait' : 'pointer', flexShrink: 0 }}
-              >
-                {completando ? <><i className="bi bi-arrow-repeat"></i> Marcando…</> : 'Completar'}
-              </button>
-            )}
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '13px', color: completada ? '#9ca3af' : 'white', textDecoration: completada ? 'line-through' : 'none' }}>
+                    {p.nombre}
+                  </div>
+                  {completada && p.completado_at && (
+                    <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
+                      ✓ {new Date(p.completado_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+                  {activa && <div style={{ fontSize: '11px', color: '#F59E0B', marginTop: '2px' }}>En curso</div>}
+                  {!completada && !activa && <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>Pendiente</div>}
+                </div>
+
+                {/* Botón completar */}
+                {activa && (
+                  <button
+                    onClick={() => onCompletar(p.id)}
+                    disabled={completando}
+                    style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#000', fontWeight: 700, fontSize: '12px', cursor: completando ? 'wait' : 'pointer', flexShrink: 0 }}
+                  >
+                    {completando ? <><i className="bi bi-arrow-repeat"></i> Marcando…</> : 'Completar'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* SECCIÓN 2: REPORTES CIUDADANOS */}
+      {reportesCiudadanos && reportesCiudadanos.length > 0 && (
+        <div style={{ marginTop: '10px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#ef4444', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>🗑️ REPORTES CIUDADANOS A RECOLECTAR</span>
           </div>
-        );
-      })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {reportesCiudadanos.map(r => {
+              const resuelto = r.estado === 'resuelto';
+              return (
+                <div key={`reporte-card-${r.id}`} style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: resuelto ? 'rgba(34,197,94,0.06)' : 'rgba(239, 68, 68, 0.08)',
+                  border: `1px solid ${resuelto ? 'rgba(34,197,94,0.2)' : 'rgba(239, 68, 68, 0.3)'}`,
+                  display: 'flex', flexDirection: 'column', gap: '8px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                      background: resuelto ? 'rgba(34,197,94,0.2)' : 'rgba(239, 68, 68, 0.2)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px'
+                    }}>
+                      {resuelto ? <i className="bi bi-check-lg" style={{ color: '#22c55e' }}></i> : <i className="bi bi-exclamation-circle-fill" style={{ color: '#ef4444' }}></i>}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: resuelto ? '#9ca3af' : 'white', textDecoration: resuelto ? 'line-through' : 'none' }}>
+                        {r.tipo_problema}
+                      </div>
+                      <div style={{ fontSize: '11px', color: resuelto ? '#6b7280' : '#d1d5db', marginTop: '2px', lineHeight: 1.4 }}>
+                        {r.descripcion}
+                      </div>
+                      {r.nombre_ciudadano && (
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>
+                          Reportado por: {r.nombre_ciudadano}
+                        </div>
+                      )}
+                    </div>
+
+                    {!resuelto && (
+                      <button
+                        onClick={() => onResolverReporte(r.id)}
+                        style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 800, fontSize: '12px', cursor: 'pointer', flexShrink: 0 }}
+                      >
+                        Recoger
+                      </button>
+                    )}
+                  </div>
+
+                  {r.foto_url && !resuelto && (
+                    <div style={{ marginTop: '4px' }}>
+                      <img 
+                        src={getAssetUrl(r.foto_url)} 
+                        alt="Evidencia punto crítico" 
+                        style={{ width: '100%', maxHeight: '160px', objectFit: 'cover', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

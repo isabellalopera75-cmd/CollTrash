@@ -54,7 +54,7 @@ const tiposReporte = [
 ];
 
 export default function PortalCiudadano() {
-  const [onboarding, setOnboarding] = useState("google");
+  const [onboarding, setOnboarding] = useState("auth");
   const [zona, setZona] = useState("centro");
   const [barrioReal, setBarrioReal] = useState("Barrio Centro");
   const [tab, setTab] = useState("inicio");
@@ -67,7 +67,7 @@ export default function PortalCiudadano() {
 
     const localZona = localStorage.getItem('pc_zona');
     const localBarrio = localStorage.getItem('pc_barrio');
-    const token = sessionStorage.getItem('token');
+    const token = localStorage.getItem('token');
     
     if (localZona && token) {
       setZona(localZona);
@@ -75,9 +75,9 @@ export default function PortalCiudadano() {
       setOnboarding("done");
       cargarMisReportes();
     } else {
-      // Si no hay token, asegurarse de que no pase al dashboard
+      // Si no hay token, mostrar pantalla de login ("auth" es el nombre del estado inicial)
       setOnboarding("auth");
-      sessionStorage.removeItem('token');
+      localStorage.removeItem('token');
     }
 
     return () => {
@@ -87,7 +87,10 @@ export default function PortalCiudadano() {
 
   useEffect(() => {
     const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
-    const socket = io(socketUrl);
+    const token = localStorage.getItem('token');
+    const socket = io(socketUrl, {
+      auth: { token }
+    });
 
     socket.on('connect', () => {
       console.log('🔌 Socket conectado en PortalCiudadano');
@@ -121,12 +124,12 @@ export default function PortalCiudadano() {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('token');
+    localStorage.removeItem('token');
     localStorage.removeItem('pc_zona');
     localStorage.removeItem('pc_barrio');
     localStorage.removeItem('pc_user_email');
     localStorage.removeItem('pc_user_nombre');
-    setOnboarding("google");
+    setOnboarding("auth");
     setTab("inicio");
   };
 
@@ -139,7 +142,7 @@ export default function PortalCiudadano() {
     return (
       <div className="pc-wrapper">
         <div className="pc-container">
-          {onboarding === "google" && <OnboardingAuth onNext={() => setOnboarding("ubicacion")} />}
+          {onboarding === "auth" && <OnboardingAuth onNext={() => setOnboarding("ubicacion")} />}
           {onboarding === "ubicacion" && <OnboardingUbicacion onNext={() => setOnboarding("confirmacion")} onManual={() => setOnboarding("manual")} setZona={(z) => {setZona(z); setBarrioReal("Barrio Centro");}} />}
           {onboarding === "manual" && <OnboardingManual onNext={() => setOnboarding("confirmacion")} setZona={setZona} setBarrioReal={setBarrioReal} onBack={() => setOnboarding("ubicacion")} />}
           {onboarding === "confirmacion" && <OnboardingConfirmacion zona={zona} barrioReal={barrioReal} onFinish={() => handleFinishOnboarding(zona, barrioReal)} />}
@@ -213,57 +216,70 @@ function OnboardingAuth({ onNext }) {
     setLoading(true);
     setErrorMsg("");
 
-    try {
-      // 1. Verificar si el correo pertenece a un conductor o administrador registrado en el backend
-      const checkRes = await verificarCorreo(email.trim());
-      if (checkRes.data.existe) {
-        const rolLabel = checkRes.data.rol === 'conductor' ? 'un conductor' : 'un administrador';
-        setErrorMsg(`Este correo pertenece a ${rolLabel} del sistema y no puede ser usado aquí.`);
-        setLoading(false);
-        return;
-      }
-    } catch (err) {
-      console.error("Error al verificar correo con el backend:", err);
-    }
+    const emailNorm = email.trim().toLowerCase();
 
-      if (tabMode === "register") {
-        const nom = nombre.trim() || email.split("@")[0];
+    try {
+      if (tabMode === "login") {
+        // ── INICIAR SESIÓN ──────────────────────────────────────────
+        // Solo intenta autenticar. El backend ya sabe si es ciudadano o no.
+        try {
+          const res = await login({ email: emailNorm, password: password.trim() });
+          if (res.data.usuario.rol !== 'ciudadano') {
+            setErrorMsg('Esta cuenta no pertenece a un ciudadano. Usa el acceso de administrador o conductor.');
+            return;
+          }
+          localStorage.setItem('token', res.data.token);
+          localStorage.setItem("pc_user_email", res.data.usuario.email);
+          localStorage.setItem("pc_user_nombre", res.data.usuario.nombre);
+          onNext();
+        } catch (err) {
+          const status = err.response?.status;
+          if (status === 401) {
+            // El email no existe en ciudadanos → sugerir registrarse
+            setErrorMsg('Correo o contraseña incorrectos. Si aún no tienes cuenta, regístrate.');
+          } else {
+            setErrorMsg(err.response?.data?.mensaje || 'Error al iniciar sesión.');
+          }
+        }
+
+      } else {
+        // ── REGISTRARSE ─────────────────────────────────────────────
+        // 1. Si el correo pertenece a un admin/conductor → inválido aquí
+        try {
+          const checkRes = await verificarCorreo(emailNorm);
+          if (checkRes.data.existe) {
+            setErrorMsg('Este correo no puede usarse para el portal ciudadano.');
+            return;
+          }
+        } catch { /* si falla la verificación, continuar igualmente */ }
+
+        // 2. Intentar registrar. El backend rechaza duplicados en ciudadanos.
+        const nom = nombre.trim() || emailNorm.split("@")[0];
         const nomCapitalizado = nom.charAt(0).toUpperCase() + nom.slice(1);
-        
         try {
           const res = await registrarCiudadano({
             nombre: nomCapitalizado,
-            email: email.trim().toLowerCase(),
+            email: emailNorm,
             password: password.trim()
           });
-          sessionStorage.setItem('token', res.data.token);
+          localStorage.setItem('token', res.data.token);
           localStorage.setItem("pc_user_email", res.data.usuario.email);
           localStorage.setItem("pc_user_nombre", res.data.usuario.nombre);
           onNext();
         } catch (err) {
-          setErrorMsg(err.response?.data?.mensaje || 'Error al registrar ciudadano.');
-        }
-      } else {
-        try {
-          const res = await login({
-            email: email.trim().toLowerCase(),
-            password: password.trim()
-          });
-          
-          if (res.data.usuario.rol !== 'ciudadano') {
-            setErrorMsg('Esta cuenta no pertenece a un ciudadano.');
-            return;
+          const mensaje = err.response?.data?.mensaje || '';
+          if (mensaje.toLowerCase().includes('ya está registrado como ciudadano') || mensaje.toLowerCase().includes('ya está registrado')) {
+            // Ya existe → redirigir a login
+            setTabMode('login');
+            setErrorMsg('Ya tienes una cuenta con este correo. Inicia sesión.');
+          } else {
+            setErrorMsg(mensaje || 'Error al registrar.');
           }
-          
-          sessionStorage.setItem('token', res.data.token);
-          localStorage.setItem("pc_user_email", res.data.usuario.email);
-          localStorage.setItem("pc_user_nombre", res.data.usuario.nombre);
-          onNext();
-        } catch (err) {
-          setErrorMsg(err.response?.data?.mensaje || 'Correo o contraseña incorrectos.');
         }
       }
+    } finally {
       setLoading(false);
+    }
   };
 
   return (
@@ -734,19 +750,25 @@ function TabReportar({ onEnviado, barrioReal }) {
       alert(`⚠️ Falta completar: Se requiere una foto de evidencia para el problema "${tiposReporte[tipo]}".`);
       return;
     }
+    // Si el tipo es "Otro", la descripción es obligatoria
+    if (tipo === 5 && !desc.trim()) {
+      alert('⚠️ Falta completar: Cuando seleccionas "Otro" debes escribir una descripción del problema.');
+      return;
+    }
 
     setEnviando(true);
     try {
-      const data = {
-        nombre_ciudadano: nombre,
-        tipo_problema: tiposReporte[tipo],
-        latitud: 2.9273, // Coordenadas fijas por ahora para simulación
-        longitud: -75.2819,
-        descripcion: modoUbicacion === 'gps' ? ubicacionGPS : direccionManual,
-        foto_url: fotoPreview || 'evidencia_img.jpg' // Enviamos el base64 real si está disponible
-      };
-      
-      const res = await crearReporteCiudadano(data);
+      // Usar FormData para enviar la foto como archivo real
+      const formData = new FormData();
+      formData.append('nombre_ciudadano', nombre);
+      formData.append('tipo_problema', tiposReporte[tipo]);
+      formData.append('latitud', 2.9273);
+      formData.append('longitud', -75.2819);
+      formData.append('descripcion', modoUbicacion === 'gps' ? ubicacionGPS : direccionManual);
+      if (desc.trim()) formData.append('descripcion_extra', desc.trim());
+      if (foto) formData.append('foto', foto); // archivo real
+
+      const res = await crearReporteCiudadano(formData);
       
       setStep("success");
       setEnviando(false);
@@ -763,7 +785,7 @@ function TabReportar({ onEnviado, barrioReal }) {
     } catch (e) {
       console.error('Error al enviar reporte:', e);
       setEnviando(false);
-      alert('Error al enviar el reporte');
+      alert('Error al enviar el reporte. Intenta de nuevo.');
     }
   };
 
@@ -865,8 +887,7 @@ function TabReportar({ onEnviado, barrioReal }) {
         <input 
           type="file" 
           ref={fileInputRef} 
-          accept="image/*" 
-          capture="environment" 
+          accept="image/*"
           style={{ display: 'none' }} 
           onChange={handleFileChange} 
         />
@@ -898,8 +919,13 @@ function TabReportar({ onEnviado, barrioReal }) {
       </div>
 
       <div className="pc-mb-4">
-        <label className="pc-label">Descripción adicional <span style={{fontWeight: 400, color: 'var(--pc-text-muted)'}}>(opcional)</span></label>
-        <textarea className="pc-textarea" placeholder="Escribe detalles adicionales aquí..." value={desc} onChange={e => setDesc(e.target.value)}></textarea>
+        <label className="pc-label">
+          Descripción adicional{' '}
+          <span style={{fontWeight: 400, color: tipo === 5 ? 'var(--pc-status-danger)' : 'var(--pc-text-muted)'}}>
+            {tipo === 5 ? '* (obligatorio)' : '(opcional)'}
+          </span>
+        </label>
+        <textarea className="pc-textarea" placeholder={tipo === 5 ? 'Describe el problema con detalle...' : 'Escribe detalles adicionales aquí...'} value={desc} onChange={e => setDesc(e.target.value)}></textarea>
       </div>
 
       <button className="pc-btn-primary" disabled={enviando} onClick={handleEnviar}>

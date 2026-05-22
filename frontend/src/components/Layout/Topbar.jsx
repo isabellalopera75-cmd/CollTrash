@@ -17,7 +17,10 @@ export default function Topbar() {
     cargarNotificaciones();
 
     const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
-    const socket = io(socketUrl);
+    const token = localStorage.getItem('token');
+    const socket = io(socketUrl, {
+      auth: { token }
+    });
     
     socket.on('connect', () => setSocketConectado(true));
     socket.on('disconnect', () => setSocketConectado(false));

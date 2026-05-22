@@ -8,11 +8,11 @@ export const AuthProvider = ({ children }) => {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    const token = sessionStorage.getItem('token');
+    const token = localStorage.getItem('token');
     if (token) {
       obtenerPerfil()
         .then(res => setUsuario(res.data.usuario))
-        .catch(() => sessionStorage.removeItem('token'))
+        .catch(() => localStorage.removeItem('token'))
         .finally(() => setCargando(false));
     } else {
       setCargando(false);
@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const cerrarSesion = () => {
-    sessionStorage.removeItem('token');
+    localStorage.removeItem('token');
     setUsuario(null);
   };
 

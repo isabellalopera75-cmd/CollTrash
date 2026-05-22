@@ -173,27 +173,6 @@
   border-color: #333D52;
 }
 
-.pc-btn-google {
-  width: 100%;
-  background-color: #fff;
-  color: #1a1a1a;
-  border: 1px solid #e0e0e0;
-  border-radius: 14px;
-  padding: 16px;
-  font-weight: 600;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  cursor: pointer;
-  margin-bottom: 16px;
-  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
-  transition: background-color 0.2s;
-}
-.pc-btn-google:hover {
-  background-color: #F8F9FA;
-}
 
 .pc-input {
   width: 100%;

@@ -15,6 +15,7 @@ export default function ConductorPanel() {
   const [tab, setTab] = useState('ruta');
   const [asignacion, setAsignacion] = useState(null);
   const [paradas, setParadas] = useState([]);
+  const [reportesCiudadanos, setReportesCiudadanos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [iniciado, setIniciado] = useState(false);
   const [completando, setCompletando] = useState(false);
@@ -36,7 +37,10 @@ export default function ConductorPanel() {
     document.body.style.backgroundColor = '#0a0a0a';
 
     const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
-    socketRef.current = io(socketUrl);
+    const token = localStorage.getItem('token');
+    socketRef.current = io(socketUrl, {
+      auth: { token }
+    });
     cargar(); 
     return () => { 
       clearInterval(simRef.current); 
@@ -53,6 +57,7 @@ export default function ConductorPanel() {
       const ra = await API.get(`/conductor/mi-asignacion?fecha=${hoy}`);
       const a = ra.data.asignacion;
       setAsignacion(a);
+      setReportesCiudadanos(ra.data.reportesCiudadanos || []);
       if (a) {
         const rp = await API.get(`/conductor/mis-paradas/${a.id}`);
         const pp = rp.data.paradas;
@@ -115,9 +120,26 @@ export default function ConductorPanel() {
         setParadas(prev => prev.map((p, i) => i === 0 && p.estado === 'pendiente' ? { ...p, estado: 'en_curso' } : p));
         // timer minutos locales
         timerRef.current = setInterval(() => setTiempoMin(m => m + 1), 60000);
+
+        // Alerta al conductor si hay reportes asignados
+        const pendientesCount = reportesCiudadanos.filter(r => r.estado === 'en_proceso').length;
+        if (pendientesCount > 0) {
+          alert(`⚠️ ATENCIÓN CONDUCTOR:\nTienes ${pendientesCount} reporte(s) ciudadano(s) de basura asignado(s) para recolección hoy en esta ruta.\nPor favor, revísalos en tu mapa o en la lista de paradas.`);
+        }
       } catch (e) {
         console.error('❌ ERROR AL INICIAR RUTA:', e.response?.data || e.message);
       }
+    }
+  };
+
+  const resolverReporte = async (reporteId) => {
+    try {
+      await API.put(`/conductor/reporte/${reporteId}/resolver`);
+      alert('✅ Reporte ciudadano marcado como RESUELTO con éxito');
+      cargar();
+    } catch (e) {
+      console.error('Error al resolver reporte:', e);
+      alert('Error al resolver el reporte ciudadano');
     }
   };
 
@@ -161,6 +183,24 @@ export default function ConductorPanel() {
   const total = paradas.length;
   const porcentaje = total ? Math.round((completadas / total) * 100) : 0;
   const paradaActual = paradas.find(p => p.estado === 'en_curso');
+
+  // Calcular distancia aproximada recorrida (Haversine sobre el trazado simulado)
+  const calcularKmEstimados = () => {
+    const trazado = FAKE_TRAZADO;
+    let totalKm = 0;
+    for (let i = 1; i < trazado.length; i++) {
+      const [lat1, lng1] = trazado[i - 1];
+      const [lat2, lng2] = trazado[i];
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+      totalKm += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+    // Escalar por paradas completadas y un factor de tortuosidad de calles
+    const factor = total > 0 ? completadas / total : 1;
+    return (totalKm * factor * 1.35).toFixed(1);
+  };
 
   const s = { // estilos reutilizables
     bg: '#0a0a0a', card: '#111111', border: '#1f2937',
@@ -229,6 +269,16 @@ export default function ConductorPanel() {
             <span style={{ fontSize: '10px', color: s.muted }}>Fin est.: {asignacion?.hora_limite_fin ? String(asignacion.hora_limite_fin).substring(0, 5) : '--:--'}</span>
           </div>
         </div>
+
+        {/* ALERTA DE REPORTES CIUDADANOS ASIGNADOS */}
+        {iniciado && reportesCiudadanos.filter(r => r.estado === 'en_proceso').length > 0 && (
+          <div style={{ padding: '10px 16px', background: 'rgba(239, 68, 68, 0.15)', borderBottom: `1px solid ${s.border}`, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="dot-pulsar" style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
+            <span style={{ fontSize: '11px', color: '#fca5a5', fontWeight: 600 }}>
+              ⚠️ Tienes {reportesCiudadanos.filter(r => r.estado === 'en_proceso').length} reporte(s) ciudadano(s) pendiente(s) hoy.
+            </span>
+          </div>
+        )}
 
         {/* TABS */}
         <div style={{ display: 'flex', background: s.card, borderBottom: `1px solid ${s.border}` }}>
@@ -307,14 +357,18 @@ export default function ConductorPanel() {
             {/* Botón finalizar ruta (solo si llegó al 100%) */}
             {iniciado && porcentaje === 100 && tab === 'ruta' && (
               <div style={{ padding: '12px 16px', background: '#0d0d0d', borderBottom: `1px solid ${s.border}` }}>
-                <button onClick={() => setMostrarModalFin(true)} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: 'none', background: s.amber, color: '#000', fontWeight: 800, fontSize: '15px', cursor: 'pointer', animation: 'pulsar 2s infinite' }}>
+                <button onClick={() => {
+                  // Si el backend no envió km via socket, calcular localmente
+                  if (!kmFinales || kmFinales === 0) setKmFinales(parseFloat(calcularKmEstimados()));
+                  setMostrarModalFin(true);
+                }} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: 'none', background: s.amber, color: '#000', fontWeight: 800, fontSize: '15px', cursor: 'pointer', animation: 'pulsar 2s infinite' }}>
                   <i className="bi bi-check2-circle" style={{ marginRight: '8px' }}></i>Finalizar Ruta
                 </button>
               </div>
             )}
 
-            {tab === 'ruta' && <TabRuta paradas={paradas} posicion={posicion} asignacion={asignacion} />}
-            {tab === 'paradas' && <TabParadas paradas={paradas} onCompletar={completarParada} completando={completando} />}
+            {tab === 'ruta' && <TabRuta paradas={paradas} posicion={posicion} asignacion={asignacion} reportesCiudadanos={reportesCiudadanos} />}
+            {tab === 'paradas' && <TabParadas paradas={paradas} onCompletar={completarParada} completando={completando} reportesCiudadanos={reportesCiudadanos} onResolverReporte={resolverReporte} />}
             {tab === 'novedades' && (
               asignacion && iniciado
                 ? <TabNovedades asignacionId={asignacion.id} conductorId={usuario?.id} />
@@ -375,7 +429,7 @@ export default function ConductorPanel() {
       {/* MODAL FINALIZAR RUTA */}
       {mostrarModalFin && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#111', borderRadius: '16px', padding: '24px', width: '100%', border: `1px solid ${s.border}`, textAlign: 'center' }}>
+          <div style={{ background: '#111', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '340px', border: `1px solid ${s.border}`, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', textAlign: 'center' }}>
             <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏁</div>
             <h3 style={{ color: '#fff', fontSize: '20px', marginBottom: '8px' }}>¡Ruta Completada!</h3>
             <p style={{ color: s.muted, fontSize: '14px', marginBottom: '20px' }}>

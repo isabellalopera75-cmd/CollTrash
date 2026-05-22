@@ -4,9 +4,16 @@ const API = axios.create({
   baseURL: window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000/api' : '/api'
 });
 
+export const getAssetUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('data:')) return path;
+  const backendBase = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : '';
+  return `${backendBase}${path}`;
+};
+
 // Agregar token automáticamente a cada petición
 API.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem('token');
+  const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -16,7 +23,7 @@ API.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      sessionStorage.removeItem('token');
+      localStorage.removeItem('token');
       if (window.location.pathname !== '/login' && window.location.pathname !== '/portal') {
         window.location.href = '/login';
       }
@@ -57,14 +64,18 @@ export const editarJornada = (id, data) => API.put(`/rutas/jornadas/${id}`, data
 export const obtenerConductores = () => API.get('/auth/conductores');
 export const obtenerAsignaciones = (fecha) => API.get(`/asignaciones?fecha=${fecha}`);
 export const reasignarAsignacion = (id, data) => API.put(`/asignaciones/${id}/reasignar`, data);
+export const obtenerAsignacionesDisponibles = () => API.get('/asignaciones/disponibles');
 
 // Reportes ciudadanos
 export const obtenerReportes = () => API.get('/reportes');
+export const obtenerReportesCiudadanos = () => API.get('/reportes');
 export const obtenerMisReportes = () => API.get('/reportes/mis-reportes');
 export const actualizarEstadoReporte = (id, data) => API.put(`/reportes/${id}/estado`, data);
 export const atenderReporte = (id, data) => API.put(`/reportes/${id}/atender`, data);
 export const rechazarReporte = (id, data) => API.put(`/reportes/${id}/rechazar`, data);
-export const crearReporteCiudadano = (data) => API.post('/reportes', data);
+export const crearReporteCiudadano = (data) => API.post('/reportes', data, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
 
 // Barrios
 export const obtenerBarrios = () => API.get('/barrios');

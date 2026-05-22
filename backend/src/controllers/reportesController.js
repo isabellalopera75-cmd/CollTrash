@@ -1,19 +1,18 @@
 const pool = require('../config/database');
 const { crearNotificacion } = require('../services/notificacionService');
 const { getIo } = require('../config/socket');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
-});
-
 const crearReporte = async (req, res) => {
-  const { latitud, longitud, descripcion, foto_url, tipo_problema, nombre_ciudadano, barrio_id } = req.body;
+  const { latitud, longitud, descripcion, tipo_problema, nombre_ciudadano, barrio_id, descripcion_extra } = req.body;
   
-  // El ciudadanoId es opcional si entra como invitado/Google simulado
   const ciudadanoId = req.usuario ? req.usuario.id : null;
+  // Construir URL de la foto si se subió un archivo
+  const foto_url = req.file ? `/uploads/reportes/${req.file.filename}` : null;
+  // Combinar ubicación con descripción extra si existe
+  const descripcionCompleta = descripcion_extra
+    ? `${descripcion || ''}\n[Detalle: ${descripcion_extra}]`.trim()
+    : (descripcion || null);
 
   try {
     if (!latitud || !longitud || !tipo_problema || !nombre_ciudadano) {
@@ -23,7 +22,7 @@ const crearReporte = async (req, res) => {
     const resultado = await pool.query(
       `INSERT INTO reportes_ciudadanos (ciudadano_id, latitud, longitud, descripcion, foto_url, tipo_problema, nombre_ciudadano)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [ciudadanoId, latitud, longitud, descripcion, foto_url, tipo_problema, nombre_ciudadano]
+      [ciudadanoId, latitud, longitud, descripcionCompleta, foto_url, tipo_problema, nombre_ciudadano]
     );
 
     // NOTIFICAR ADMIN: Nuevo reporte ciudadano
@@ -43,14 +42,34 @@ const crearReporte = async (req, res) => {
 
 const obtenerReportes = async (req, res) => {
   try {
+    const limite = parseInt(req.query.limite) || 20;
+    const pagina = parseInt(req.query.pagina) || 1;
+    const offset = (pagina - 1) * limite;
+
+    // Obtener el total de registros para metadatos
+    const totalRes = await pool.query('SELECT COUNT(*) FROM reportes_ciudadanos');
+    const totalRegistros = parseInt(totalRes.rows[0].count);
+    const totalPaginas = Math.ceil(totalRegistros / limite);
+
     // Usamos LEFT JOIN para que se vean los reportes aunque no tengan un ciudadano_id vinculado
     const resultado = await pool.query(
       `SELECT r.*, COALESCE(c.nombre, r.nombre_ciudadano) AS ciudadano_nombre, c.email AS ciudadano_email
        FROM reportes_ciudadanos r
        LEFT JOIN ciudadanos c ON c.id = r.ciudadano_id
-       ORDER BY r.created_at DESC`
+       ORDER BY r.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limite, offset]
     );
-    res.status(200).json({ reportes: resultado.rows });
+
+    res.status(200).json({ 
+      reportes: resultado.rows,
+      paginacion: {
+        totalRegistros,
+        totalPaginas,
+        paginaActual: pagina,
+        limite
+      }
+    });
   } catch (error) {
     console.error('Error al obtener reportes:', error.message);
     res.status(500).json({ mensaje: 'Error interno del servidor.' });
@@ -76,22 +95,6 @@ const atenderReporte = async (req, res) => {
     const io = getIo();
     if (io) {
       io.emit('reporte_actualizado', reporte.rows[0]);
-    }
-
-    // Si tiene email de ciudadano, intentamos notificar
-    const ciudadano = await pool.query(
-      'SELECT email, nombre FROM ciudadanos WHERE id = $1',
-      [reporte.rows[0].ciudadano_id]
-    );
-
-    if (ciudadano.rows.length > 0 && ciudadano.rows[0].email && process.env.GMAIL_USER) {
-      await transporter.sendMail({
-        from: process.env.GMAIL_USER,
-        to: ciudadano.rows[0].email,
-        subject: 'CollTrash — Tu reporte fue atendido',
-        html: `<h2>Hola ${ciudadano.rows[0].nombre}</h2>
-               <p>Tu reporte de punto crítico de basura ha sido recibido y está en proceso de solución.</p>`
-      });
     }
 
     res.status(200).json({ mensaje: 'Reporte atendido correctamente.' });
@@ -126,17 +129,79 @@ const rechazarReporte = async (req, res) => {
 
 const actualizarEstado = async (req, res) => {
   const { id } = req.params;
-  const { estado, justificacion_rechazo, ruta_id, fecha_programada } = req.body;
+  const { estado, justificacion_rechazo, ruta_id, asignacion_id, fecha_programada } = req.body;
+
+  const targetId = asignacion_id || ruta_id;
 
   try {
     let resultado;
+    let finalAsignacionId = null;
+    let targetRutaNombre = '';
+    let targetFecha = null;
+
     if (estado === 'en_proceso' || estado === 'resuelto' || estado === 'atendido') {
-      const msjAceptado = `Programado para recolección en ruta asignada (${fecha_programada || 'Próximas 48h'})`;
+      if (targetId) {
+        if (typeof targetId === 'string' && targetId.includes('_')) {
+          const parts = targetId.split('_');
+          const rutaFijaId = parseInt(parts[0]);
+          targetFecha = parts[1];
+
+          // Obtener datos de la ruta fija
+          const infoRuta = await pool.query('SELECT nombre, conductor_default_id, vehiculo_id FROM rutas_fijas WHERE id = $1', [rutaFijaId]);
+          if (infoRuta.rows.length > 0) {
+            targetRutaNombre = infoRuta.rows[0].nombre;
+            
+            // Buscar si ya existe la asignación para esta ruta y fecha
+            let asignacionRes = await pool.query(
+              'SELECT id FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND fecha = $2',
+              [rutaFijaId, targetFecha]
+            );
+
+            if (asignacionRes.rows.length > 0) {
+              finalAsignacionId = asignacionRes.rows[0].id;
+            } else {
+              // Si no existe, la creamos dinámicamente para ese día
+              const insertRes = await pool.query(
+                `INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
+                 VALUES ($1, $2, $3, $4, 'pendiente') RETURNING id`,
+                [rutaFijaId, infoRuta.rows[0].conductor_default_id, infoRuta.rows[0].vehiculo_id, targetFecha]
+              );
+              finalAsignacionId = insertRes.rows[0].id;
+
+              // Vincular los sectores de la ruta a la nueva asignación
+              await pool.query(
+                `INSERT INTO sectores_asignacion (asignacion_id, sector_id, estado, porcentaje_recorrido)
+                 SELECT $1, id, 'pendiente', 0
+                 FROM sectores_ruta
+                 WHERE ruta_fija_id = $2`,
+                [finalAsignacionId, rutaFijaId]
+              );
+            }
+          }
+        } else {
+          finalAsignacionId = parseInt(targetId);
+          // Obtener info básica de la asignación
+          const infoAsig = await pool.query(
+            `SELECT rf.nombre, a.fecha 
+             FROM asignaciones_semanales a 
+             JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id 
+             WHERE a.id = $1`, 
+            [finalAsignacionId]
+          );
+          if (infoAsig.rows.length > 0) {
+            targetRutaNombre = infoAsig.rows[0].nombre;
+            targetFecha = infoAsig.rows[0].fecha;
+          }
+        }
+      }
+
+      const msjAceptado = `Programado para recolección en la ruta: ${targetRutaNombre || 'asignada'} (${targetFecha || fecha_programada || 'Próximas 48h'})`;
+      
       resultado = await pool.query(
         `UPDATE reportes_ciudadanos 
          SET estado = $1, asignacion_id = $2, justificacion_rechazo = $4, atendido_at = NOW()
          WHERE id = $3 RETURNING *`,
-        [estado, ruta_id || null, id, msjAceptado]
+        [estado, finalAsignacionId, id, msjAceptado]
       );
     } else if (estado === 'rechazado') {
       resultado = await pool.query(

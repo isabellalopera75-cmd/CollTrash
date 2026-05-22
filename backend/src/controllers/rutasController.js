@@ -100,9 +100,17 @@ const crearRutaFija = async (req, res) => {
     if (sectores && sectores.length > 0) {
       for (const sector of sectores) {
         await pool.query(
-          `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_requerido)
+          `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_completitud_requerido)
            VALUES ($1, $2, $3, $4, $5)`,
-          [rutaFija.id, sector.nombre, sector.orden, sector.trazado_geom, sector.porcentaje_requerido || 90]
+          [
+            rutaFija.id,
+            sector.nombre,
+            sector.orden,
+            sector.trazado_geom,
+            sector.porcentaje_completitud_requerido !== undefined
+              ? sector.porcentaje_completitud_requerido
+              : (sector.porcentaje_requerido !== undefined ? sector.porcentaje_requerido : 90)
+          ]
         );
       }
     }
@@ -320,10 +328,16 @@ const eliminarRutaFija = async (req, res) => {
     }
 
     // Limpiar asignaciones futuras pendientes de esta ruta
-    await pool.query(
-      "DELETE FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND estado = 'pendiente' AND fecha >= CURRENT_DATE",
+    const asignacionesPendientes = await pool.query(
+      "SELECT id FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND estado = 'pendiente' AND fecha >= CURRENT_DATE",
       [id]
     );
+
+    if (asignacionesPendientes.rows.length > 0) {
+      const ids = asignacionesPendientes.rows.map(r => r.id);
+      const { eliminarAsignacionesPorIds } = require('../services/dbCleanupService');
+      await eliminarAsignacionesPorIds(ids);
+    }
 
     // Auditoría
     await registrarActividad(

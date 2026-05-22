@@ -28,10 +28,6 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (rolSeleccionado === 'ciudadano') {
-      window.location.href = 'http://localhost:3000/api/auth/google';
-      return;
-    }
     setCargando(true);
     setError('');
     try {
@@ -41,11 +37,11 @@ export default function Login() {
       // Validar que el rol coincida con la pestaña seleccionada
       if (usuario.rol !== rolSeleccionado) {
         setError(`Esta cuenta no es de tipo "${roles.find(r => r.key === rolSeleccionado)?.label}". Selecciona el rol correcto.`);
-        sessionStorage.removeItem('token');
+        localStorage.removeItem('token');
         return;
       }
 
-      sessionStorage.setItem('token', res.data.token);
+      localStorage.setItem('token', res.data.token);
       setUsuario(usuario);
 
       if (usuario.rol === 'conductor') {

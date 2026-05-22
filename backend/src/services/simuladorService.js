@@ -20,12 +20,18 @@ const startSimulation = async (asignacionId) => {
     const asig = result.rows[0];
 
     const sectores = await pool.query(
-      `SELECT sa.id as sa_id, sr.trazado_geom, sr.orden 
+      `SELECT sa.id as sa_id, sa.porcentaje_recorrido, sr.trazado_geom, sr.orden 
        FROM sectores_asignacion sa
        JOIN sectores_ruta sr ON sr.id = sa.sector_id
        WHERE sa.asignacion_id = $1
        ORDER BY sr.orden ASC`, [asignacionId]
     );
+
+    let existingProgress = 0;
+    if (sectores.rows.length > 0) {
+      const sum = sectores.rows.reduce((acc, s) => acc + parseFloat(s.porcentaje_recorrido || 0), 0);
+      existingProgress = sum / (sectores.rows.length * 100);
+    }
 
     let pts = [];
     sectores.rows.forEach(s => {
@@ -39,9 +45,13 @@ const startSimulation = async (asignacionId) => {
     }
 
     const msTotal = 180 * 1000; // 3 minutos para completar toda la ruta (Modo Demo)
-    let startTime = Date.now();
-    let totalDistancia = 0;
-    let ultimaPos = pts[0];
+    let startTime = Date.now() - (existingProgress * msTotal);
+    let totalDistancia = parseFloat(asig.km_recorridos) || 0;
+    
+    let startIdx = Math.floor(existingProgress * (pts.length - 1));
+    if (startIdx < 0) startIdx = 0;
+    if (startIdx >= pts.length) startIdx = pts.length - 1;
+    let ultimaPos = pts[startIdx];
 
     // Función Haversine para calcular distancia entre coordenadas (KM)
     const calcularDistancia = (p1, p2) => {

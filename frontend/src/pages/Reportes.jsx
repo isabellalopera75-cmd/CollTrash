@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { obtenerReportes, actualizarEstadoReporte, obtenerRutas } from '../services/api';
+import { obtenerReportes, actualizarEstadoReporte, obtenerRutas, getAssetUrl } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -127,7 +127,7 @@ export default function Reportes() {
                   <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
                     {reporteSeleccionado.foto_url && (
                       <img 
-                        src={reporteSeleccionado.foto_url} 
+                        src={getAssetUrl(reporteSeleccionado.foto_url)} 
                         alt="Evidencia" 
                         style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #333' }}
                       />

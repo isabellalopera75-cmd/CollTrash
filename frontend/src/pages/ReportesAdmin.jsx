@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
-import { obtenerReportesCiudadanos, actualizarEstadoReporte, obtenerAsignacionesDisponibles } from '../services/api';
+import { obtenerReportesCiudadanos, actualizarEstadoReporte, obtenerAsignacionesDisponibles, getAssetUrl } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+const formatearFecha = (fechaStr) => {
+  if (!fechaStr) return '';
+  const datePart = fechaStr.split('T')[0];
+  const parts = datePart.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+  }
+  return new Date(fechaStr).toLocaleDateString();
+};
 
 export default function ReportesAdmin() {
   const [reportes, setReportes] = useState([]);
@@ -108,7 +118,7 @@ export default function ReportesAdmin() {
                     <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
                       {reporteSeleccionado.foto_url && (
                         <img 
-                          src={reporteSeleccionado.foto_url} 
+                          src={getAssetUrl(reporteSeleccionado.foto_url)} 
                           alt="Evidencia" 
                           style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #333' }}
                         />
@@ -149,10 +159,10 @@ export default function ReportesAdmin() {
                 <select className="card" style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white' }} value={asignacionId} onChange={e => setAsignacionId(e.target.value)}>
                   <option value="">Selecciona una opción...</option>
                   {asignaciones.map(a => (
-                    <option key={a.id} value={a.id}>{a.ruta_nombre} - {a.jornada_nombre} ({new Date(a.fecha).toLocaleDateString()})</option>
+                    <option key={a.id} value={a.id}>{a.ruta_nombre} - {a.jornada_nombre} ({formatearFecha(a.fecha)})</option>
                   ))}
                 </select>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px' }}>💡 Al aceptar, se le notificará al ciudadano por Gmail.</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px' }}>💡 El ciudadano podrá ver la actualización del estado desde su portal web.</p>
               </div>
             ) : (
               <div>

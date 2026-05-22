@@ -93,9 +93,9 @@ const reasignarAsignacion = async (req, res) => {
     
     try {
       await pool.query(
-        `INSERT INTO cambios_conductor (ruta_fija_id, conductor_original_id, conductor_nuevo_id, motivo, fecha_inicio, fecha_fin, tipo_cambio)
-         VALUES ($1, $2, $3, $4, $5, $5, 'temporal')`,
-        [asigActual.rows[0].ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, asigActual.rows[0].fecha]
+        `INSERT INTO cambios_conductor (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, tipo_cambio)
+         VALUES ($1, $2, $3, $4, $5, $5, $6)`,
+        [asigActual.rows[0].ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, asigActual.rows[0].fecha, 'temporal']
       );
     } catch (err) {
       console.error("No se pudo insertar en cambios_conductor:", err.message);
@@ -136,8 +136,39 @@ const habilitarInicioTardio = async (req, res) => {
   }
 };
 
+const obtenerAsignacionesDisponibles = async (req, res) => {
+  try {
+    // Generar las asignaciones de los próximos 7 días en segundo plano (asíncronamente) para no bloquear el request
+    const { generarAsignaciones } = require('../services/cronService');
+    generarAsignaciones().catch(err => console.error('Error al generar asignaciones en disponibles (segundo plano):', err.message));
+
+    // Obtener asignaciones desde hoy y los próximos 2 días (total 3 días en el futuro cercano)
+    const resultado = await pool.query(
+      `SELECT asig.id, 
+              asig.fecha,
+              asig.estado,
+              rf.id AS ruta_fija_id,
+              rf.nombre AS ruta_nombre,
+              j.nombre AS jornada_nombre,
+              j.hora_inicio AS j_hora_inicio,
+              j.hora_limite_fin
+       FROM asignaciones_semanales asig
+       JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
+       JOIN jornadas j ON j.id = rf.jornada_id
+       WHERE asig.fecha >= CURRENT_DATE AND asig.fecha <= (CURRENT_DATE + interval '2 days')
+       ORDER BY asig.fecha ASC, j.hora_inicio ASC`
+    );
+
+    res.json({ asignaciones: resultado.rows });
+  } catch (error) {
+    console.error('Error al obtener asignaciones disponibles:', error.message);
+    res.status(500).json({ mensaje: 'Error al obtener asignaciones disponibles.' });
+  }
+};
+
 module.exports = {
   obtenerAsignacionesPorFecha,
   reasignarAsignacion,
-  habilitarInicioTardio
+  habilitarInicioTardio,
+  obtenerAsignacionesDisponibles
 };

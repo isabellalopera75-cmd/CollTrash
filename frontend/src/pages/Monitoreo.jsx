@@ -11,7 +11,10 @@ export default function Monitoreo() {
 
   useEffect(() => {
     const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
-    socketRef.current = io(socketUrl);
+    const token = localStorage.getItem('token');
+    socketRef.current = io(socketUrl, {
+      auth: { token }
+    });
     
     socketRef.current.on('ubicacion_vehiculo', (data) => {
       setVehiculos(prev => {

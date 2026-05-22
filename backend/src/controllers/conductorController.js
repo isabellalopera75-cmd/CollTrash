@@ -2,38 +2,14 @@ const pool = require('../config/database');
 const { startSimulation } = require('../services/simuladorService');
 const { crearNotificacion } = require('../services/notificacionService');
 
-// Conductor ve sus rutas de la semana
-const misRutas = async (req, res) => {
-  const conductorId = req.usuario.id;
-
-  try {
-    const hoy = new Date();
-    const lunes = new Date(hoy);
-    lunes.setDate(hoy.getDate() - hoy.getDay() + 1);
-    const sabado = new Date(lunes);
-    sabado.setDate(lunes.getDate() + 5);
-
-    const resultado = await pool.query(
-      `SELECT a.*, rf.nombre AS ruta_nombre,
-              j.nombre AS jornada_nombre,
-              j.hora_inicio, j.hora_limite_fin,
-              v.placa, a.habilitado_por_admin
-       FROM asignaciones_semanales a
-       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-       JOIN jornadas j ON j.id = rf.jornada_id
-       JOIN vehiculos v ON v.id = a.vehiculo_id
-       WHERE a.conductor_id = $1
-       AND a.fecha BETWEEN $2 AND $3
-       ORDER BY a.fecha ASC`,
-      [conductorId, lunes.toISOString().split('T')[0], sabado.toISOString().split('T')[0]]
-    );
-
-    res.status(200).json({ rutas: resultado.rows });
-  } catch (error) {
-    console.error('Error:', error.message);
-    res.status(500).json({ mensaje: 'Error interno del servidor.' });
-  }
+const verificarPropietarioAsignacion = async (asignacionId, conductorId) => {
+  const resultado = await pool.query(
+    'SELECT id FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2',
+    [asignacionId, conductorId]
+  );
+  return resultado.rows.length > 0;
 };
+
 
 // Iniciar ruta
 const iniciarRuta = async (req, res) => {
@@ -161,8 +137,13 @@ const iniciarRuta = async (req, res) => {
 const actualizarSector = async (req, res) => {
   const { id, sectorId } = req.params;
   const { porcentaje_recorrido } = req.body;
+  const conductorId = req.usuario.id;
 
   try {
+    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
+      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    }
+
     const completado = porcentaje_recorrido >= 90;
 
     await pool.query(
@@ -204,8 +185,13 @@ const actualizarSector = async (req, res) => {
 const registrarDescarga = async (req, res) => {
   const { id } = req.params;
   const { sector_pausa_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng } = req.body;
+  const conductorId = req.usuario.id;
 
   try {
+    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
+      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    }
+
     const resultado = await pool.query(
       `INSERT INTO descargas 
        (asignacion_id, sector_pausa_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng, hora_salida)
@@ -223,8 +209,13 @@ const registrarDescarga = async (req, res) => {
 // Completar descarga
 const completarDescarga = async (req, res) => {
   const { id, descargaId } = req.params;
+  const conductorId = req.usuario.id;
 
   try {
+    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
+      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    }
+
     await pool.query(
       'UPDATE descargas SET hora_regreso = NOW() WHERE id = $1 AND asignacion_id = $2',
       [descargaId, id]
@@ -241,8 +232,13 @@ const completarDescarga = async (req, res) => {
 const registrarGPS = async (req, res) => {
   const { id } = req.params;
   const { latitud, longitud } = req.body;
+  const conductorId = req.usuario.id;
 
   try {
+    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
+      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    }
+
     await pool.query(
       'INSERT INTO rastreo_gps (asignacion_id, latitud, longitud) VALUES ($1, $2, $3)',
       [id, latitud, longitud]
@@ -262,6 +258,10 @@ const reportarIncidencia = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
+    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
+      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    }
+
     const tiposPermitidos = ['trancon', 'accidente', 'contenedor_lleno', 'via_bloqueada'];
     if (!tiposPermitidos.includes(tipo)) {
       return res.status(400).json({ mensaje: `Tipo debe ser uno de: ${tiposPermitidos.join(', ')}` });
@@ -287,8 +287,12 @@ const finalizarRuta = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!toneladas) {
-      return res.status(400).json({ mensaje: 'Las toneladas recolectadas son obligatorias.' });
+    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
+      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    }
+
+    if (toneladas === undefined || toneladas === null || toneladas < 0) {
+      return res.status(400).json({ mensaje: 'Las toneladas recolectadas son obligatorias y deben ser válidas.' });
     }
 
     // Verificar que todos los sectores estén completados
@@ -302,55 +306,80 @@ const finalizarRuta = async (req, res) => {
       return res.status(400).json({ mensaje: 'Aún hay sectores pendientes por completar.' });
     }
 
-    // Finalizar asignación
-    await pool.query(
-      `UPDATE asignaciones_semanales 
-       SET estado = 'completada', hora_fin_real = NOW()
-       WHERE id = $1 AND conductor_id = $2`,
-      [id, conductorId]
-    );
+    // Iniciar transacción para evitar Race Conditions
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // Calcular eficiencia
-    const asignacion = await pool.query(
-      'SELECT * FROM asignaciones_semanales WHERE id = $1',
-      [id]
-    );
-    const a = asignacion.rows[0];
-    const tiempoMinutos = Math.round((new Date(a.hora_fin_real) - new Date(a.hora_inicio_real)) / 60000);
+      // Verificar que no haya sido completada por el simulador simultáneamente
+      const checkEstado = await client.query(
+        'SELECT estado FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2 FOR UPDATE',
+        [id, conductorId]
+      );
 
-    const sectoresTotal = await pool.query(
-      'SELECT COUNT(*) FROM sectores_asignacion WHERE asignacion_id = $1',
-      [id]
-    );
-    const sectoresCompletados = await pool.query(
-      `SELECT COUNT(*) FROM sectores_asignacion WHERE asignacion_id = $1 AND estado = 'completado'`,
-      [id]
-    );
-    const numDescargas = await pool.query(
-      'SELECT COUNT(*) FROM descargas WHERE asignacion_id = $1',
-      [id]
-    );
+      if (checkEstado.rows.length === 0 || checkEstado.rows[0].estado === 'completada') {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ mensaje: 'La ruta ya se encuentra completada o no es válida.' });
+      }
 
-    const total = parseInt(sectoresTotal.rows[0].count);
-    const completados = parseInt(sectoresCompletados.rows[0].count);
-    const porcentaje = total > 0 ? Math.round((completados / total) * 100) : 0;
+      // Finalizar asignación
+      await client.query(
+        `UPDATE asignaciones_semanales 
+         SET estado = 'completada', hora_fin_real = NOW()
+         WHERE id = $1 AND conductor_id = $2`,
+        [id, conductorId]
+      );
 
-    await pool.query(
-      `INSERT INTO eficiencia_rutas 
-       (asignacion_id, toneladas, tiempo_minutos, sectores_completados, sectores_totales, porcentaje_cumplimiento, num_descargas, km_recorridos)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [id, toneladas, tiempoMinutos, completados, total, porcentaje, parseInt(numDescargas.rows[0].count), a.km_recorridos]
-    );
+      // Calcular eficiencia
+      const asignacion = await client.query(
+        'SELECT * FROM asignaciones_semanales WHERE id = $1',
+        [id]
+      );
+      const a = asignacion.rows[0];
+      const tiempoMinutos = Math.round((new Date(a.hora_fin_real) - new Date(a.hora_inicio_real)) / 60000);
 
-    // NOTIFICAR ADMIN: Fin de ruta
-    await crearNotificacion({
-      titulo: '✅ Ruta Finalizada',
-      mensaje: `La ruta "${a.ruta_nombre || 'Sin nombre'}" ha sido completada con un ${porcentaje}% de cumplimiento.`,
-      tipo: 'operativo',
-      metadata: { asignacion_id: id, tipo: 'FIN_RUTA' }
-    });
+      const sectoresTotal = await client.query(
+        'SELECT COUNT(*) FROM sectores_asignacion WHERE asignacion_id = $1',
+        [id]
+      );
+      const sectoresCompletados = await client.query(
+        `SELECT COUNT(*) FROM sectores_asignacion WHERE asignacion_id = $1 AND estado = 'completado'`,
+        [id]
+      );
+      const numDescargas = await client.query(
+        'SELECT COUNT(*) FROM descargas WHERE asignacion_id = $1',
+        [id]
+      );
 
-    res.status(200).json({ mensaje: 'Ruta finalizada exitosamente.', porcentaje_cumplimiento: porcentaje });
+      const total = parseInt(sectoresTotal.rows[0].count);
+      const completados = parseInt(sectoresCompletados.rows[0].count);
+      const porcentaje = total > 0 ? Math.round((completados / total) * 100) : 0;
+
+      await client.query(
+        `INSERT INTO eficiencia_rutas 
+         (asignacion_id, toneladas, tiempo_minutos, sectores_completados, sectores_totales, porcentaje_cumplimiento, num_descargas, km_recorridos)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, toneladas, tiempoMinutos, completados, total, porcentaje, parseInt(numDescargas.rows[0].count), a.km_recorridos]
+      );
+
+      await client.query('COMMIT');
+      client.release();
+
+      // NOTIFICAR ADMIN: Fin de ruta
+      await crearNotificacion({
+        titulo: '✅ Ruta Finalizada',
+        mensaje: `La ruta "${a.ruta_nombre || 'Sin nombre'}" ha sido completada con un ${porcentaje}% de cumplimiento.`,
+        tipo: 'operativo',
+        metadata: { asignacion_id: id, tipo: 'FIN_RUTA' }
+      });
+
+      res.status(200).json({ mensaje: 'Ruta finalizada exitosamente.', porcentaje_cumplimiento: porcentaje });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      client.release();
+      throw err;
+    }
   } catch (error) {
     console.error('Error:', error.message);
     res.status(500).json({ mensaje: 'Error interno del servidor.' });
@@ -358,7 +387,7 @@ const finalizarRuta = async (req, res) => {
 };
 
 module.exports = {
-  misRutas, iniciarRuta, actualizarSector,
+  iniciarRuta, actualizarSector,
   registrarDescarga, completarDescarga,
   registrarGPS, reportarIncidencia, finalizarRuta
 };

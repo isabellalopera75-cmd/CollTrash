@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
 const {
-  misRutas, iniciarRuta, actualizarSector,
+  iniciarRuta, actualizarSector,
   registrarDescarga, completarDescarga,
   registrarGPS, reportarIncidencia, finalizarRuta
 } = require('../controllers/conductorController');
@@ -39,7 +39,22 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
         LIMIT 1`,
       [conductorId, fecha]
     );
-    res.json({ asignacion: r.rows[0] || null });
+
+    let reportesAsignados = [];
+    if (r.rows[0]) {
+      const repRes = await pool.query(
+        `SELECT id, tipo_problema, descripcion, latitud, longitud, foto_url, estado, nombre_ciudadano
+         FROM reportes_ciudadanos
+         WHERE asignacion_id = $1 AND estado IN ('en_proceso', 'resuelto')`,
+        [r.rows[0].id]
+      );
+      reportesAsignados = repRes.rows;
+    }
+
+    res.json({ 
+      asignacion: r.rows[0] || null,
+      reportesCiudadanos: reportesAsignados
+    });
   } catch (e) {
     console.error('Error en mi-asignacion:', e.message);
     res.status(500).json({ mensaje: 'Error al obtener asignación.' });
@@ -56,7 +71,7 @@ router.get('/mis-paradas/:asignacionId', verificarToken, async (req, res) => {
               sr.nombre,
               sr.orden,
               sr.trazado_geom,
-              sr.porcentaje_requerido,
+              sr.porcentaje_completitud_requerido AS porcentaje_requerido,
               sa.estado,
               sa.porcentaje_recorrido,
               sa.completado_at
@@ -75,10 +90,10 @@ router.get('/mis-paradas/:asignacionId', verificarToken, async (req, res) => {
 
 // ── Control de Jornada ───────────────────────────────────────
 // Iniciar recorrido (Llama al controlador con lógica de simulador y justificación)
-router.put('/asignacion/:id/iniciar', verificarToken, iniciarRuta);
+router.put('/asignacion/:id/iniciar', verificarToken, soloConductor, iniciarRuta);
 
 // Finalizar recorrido (Llama al controlador con lógica de cierre y toneladas)
-router.put('/asignacion/:id/finalizar', verificarToken, finalizarRuta);
+router.put('/asignacion/:id/finalizar', verificarToken, soloConductor, finalizarRuta);
 
 // ── Operación de Sectores ────────────────────────────────────
 // Actualizar progreso (Llama al controlador)
@@ -90,11 +105,68 @@ router.put('/asignacion/:id/descargas/:descargaId/completar', verificarToken, co
 router.post('/asignacion/:id/incidencias', verificarToken, reportarIncidencia);
 
 // ── Telemetría ───────────────────────────────────────────────
-router.post('/asignacion/:id/gps', verificarToken, registrarGPS);
+const rateLimit = require('express-rate-limit');
+const gpsLimiter = rateLimit({
+  windowMs: 10 * 1000, // 10 segundos
+  max: 3, // Máximo 3 peticiones cada 10s (permite 1 cada 3.3s, el simulador envía cada 5s)
+  message: { mensaje: 'Frecuencia de actualización de GPS excedida.' }
+});
 
-// ── Rutas Legacy / Compatibilidad (Si se usan en algún lugar) ──
-router.get('/mis-rutas', verificarToken, soloConductor, misRutas);
-router.put('/:id/iniciar', verificarToken, soloConductor, iniciarRuta);
-router.put('/:id/finalizar', verificarToken, soloConductor, finalizarRuta);
+router.post('/asignacion/:id/gps', verificarToken, gpsLimiter, registrarGPS);
+
+// ── Atender Reportes Ciudadanos por Conductor ───────────────
+router.put('/reporte/:reporteId/resolver', verificarToken, async (req, res) => {
+  const { reporteId } = req.params;
+  const conductorId = req.usuario.id;
+  try {
+    // 1. Verificar que el reporte exista y pertenezca a una asignación activa del conductor
+    const validacion = await pool.query(
+      `SELECT r.id 
+       FROM reportes_ciudadanos r
+       JOIN asignaciones_semanales a ON a.id = r.asignacion_id
+       WHERE r.id = $1 AND a.conductor_id = $2 AND a.estado = 'activa'`,
+      [reporteId, conductorId]
+    );
+
+    if (validacion.rows.length === 0) {
+      return res.status(403).json({ mensaje: 'No autorizado. El reporte no pertenece a su ruta activa.' });
+    }
+
+    // 2. Marcar el reporte como resuelto
+    const resultado = await pool.query(
+      `UPDATE reportes_ciudadanos 
+       SET estado = 'resuelto', updated_at = NOW() 
+       WHERE id = $1 RETURNING *`,
+      [reporteId]
+    );
+
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
+    }
+
+    const reporte = resultado.rows[0];
+
+    // 3. Notificar por Socket.io
+    const { getIo } = require('../config/socket');
+    const io = getIo();
+    if (io) {
+      io.emit('reporte_actualizado', reporte);
+    }
+
+    // 4. Crear una notificación de sistema para el Administrador
+    const { crearNotificacion } = require('../services/notificacionService');
+    await crearNotificacion({
+      titulo: '🗑️ Reporte Ciudadano Resuelto',
+      mensaje: `El conductor ha atendido y resuelto el reporte ciudadano #${reporte.id} (${reporte.tipo_problema}).`,
+      tipo: 'operativo',
+      metadata: { reporte_id: reporte.id, tipo: 'REPORTE_RESUELTO' }
+    }).catch(notiErr => console.error('Error al crear notificación para admin:', notiErr.message));
+
+    res.json({ mensaje: 'Reporte marcado como resuelto.', reporte });
+  } catch (e) {
+    console.error('Error al resolver reporte:', e.message);
+    res.status(500).json({ mensaje: 'Error interno al actualizar el reporte.' });
+  }
+});
 
 module.exports = router;
