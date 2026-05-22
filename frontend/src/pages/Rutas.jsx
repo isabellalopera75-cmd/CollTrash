@@ -105,14 +105,14 @@ export default function Rutas() {
   };
 
   const getStatusClass = (status) => {
-    if (status === 'en_progreso') return 'status-active';
-    if (status === 'completado') return 'status-active';
+    if (status === 'activa') return 'status-active';
+    if (status === 'completada') return 'status-active';
     return 'status-warning';
   };
 
   const getStatusIcon = (status) => {
-    if (status === 'en_progreso') return 'bi-play-circle-fill';
-    if (status === 'completado') return 'bi-check-circle-fill';
+    if (status === 'activa') return 'bi-play-circle-fill';
+    if (status === 'completada') return 'bi-check-circle-fill';
     return 'bi-clock-history';
   };
 
@@ -236,7 +236,7 @@ export default function Rutas() {
                    </span>
                    <span className={`status-badge ${getStatusClass(a.estado)}`} style={{ fontSize: '10px', padding: '5px 12px' }}>
                      <i className={`bi ${getStatusIcon(a.estado)}`} style={{ marginRight: '6px' }}></i>
-                     {a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'en_progreso' ? 'En curso' : 'Completado')}
+                     {a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'activa' ? 'En curso' : 'Completado')}
                    </span>
                    <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={() => abrirModalReasignar(a)} className="btn" style={{ padding: '6px', background: 'none', color: '#666' }} title="Reasignar">

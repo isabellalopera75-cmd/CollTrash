@@ -213,14 +213,14 @@ export default function ConductorPanel() {
         @keyframes pulsar { 0%,100%{opacity:1} 50%{opacity:0.3} }
         .dot-pulsar { animation: pulsar 1.5s ease-in-out infinite; }
         .cp-wrapper {
-          min-height: 100vh; width: 100vw; background-color: #05070A; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+          height: 100vh; height: 100dvh; width: 100vw; background-color: #05070A; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; overflow: hidden;
         }
         .cp-container {
-          width: 100%; max-width: 430px; height: calc(100vh - 32px); max-height: 920px; background-color: #0a0a0a; display: flex; flex-direction: column; position: relative; overflow: hidden; border: 1px solid #1f2937; border-radius: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85), 0 0 50px rgba(34,197,94,0.08); fontFamily: Inter, sans-serif;
+          width: 100%; max-width: 430px; height: 100%; max-height: 920px; background-color: #0a0a0a; display: flex; flex-direction: column; position: relative; overflow: hidden; border: 1px solid #1f2937; border-radius: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85), 0 0 50px rgba(34,197,94,0.08); fontFamily: Inter, sans-serif;
         }
         @media (max-width: 768px) {
           .cp-wrapper { padding: 0; background-color: #0a0a0a; }
-          .cp-container { max-width: 100%; height: 100dvh; max-height: none; border: none; border-radius: 0; box-shadow: none; }
+          .cp-container { max-width: 100%; height: 100%; max-height: none; border: none; border-radius: 0; box-shadow: none; }
         }
       `}</style>
 

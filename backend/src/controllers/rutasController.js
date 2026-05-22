@@ -100,16 +100,14 @@ const crearRutaFija = async (req, res) => {
     if (sectores && sectores.length > 0) {
       for (const sector of sectores) {
         await pool.query(
-          `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_completitud_requerido)
+          `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_requerido)
            VALUES ($1, $2, $3, $4, $5)`,
           [
             rutaFija.id,
             sector.nombre,
             sector.orden,
             sector.trazado_geom,
-            sector.porcentaje_completitud_requerido !== undefined
-              ? sector.porcentaje_completitud_requerido
-              : (sector.porcentaje_requerido !== undefined ? sector.porcentaje_requerido : 90)
+            sector.porcentaje_requerido !== undefined ? sector.porcentaje_requerido : 90
           ]
         );
       }
@@ -276,11 +274,18 @@ const editarRutaFija = async (req, res) => {
     // Si vienen sectores, actualizamos el primero (suponiendo 1 sector por ruta por ahora)
     if (sectores && sectores.length > 0) {
       const sector = sectores[0];
-      await pool.query(
+      const sectorUpdate = await pool.query(
         `UPDATE sectores_ruta SET trazado_geom = $1, nombre = $2 
-         WHERE ruta_fija_id = $3`,
+         WHERE ruta_fija_id = $3 RETURNING id`,
         [sector.trazado_geom, sector.nombre, id]
       );
+      if (sectorUpdate.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_requerido)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [id, sector.nombre, 1, sector.trazado_geom, sector.porcentaje_requerido !== undefined ? sector.porcentaje_requerido : 90]
+        );
+      }
     }
 
     // Sincronizar asignaciones semanales con el cambio

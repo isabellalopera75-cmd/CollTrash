@@ -4,13 +4,18 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
   const { fecha } = req.query; // Espera YYYY-MM-DD
   try {
     const resultado = await pool.query(
-      `SELECT asig.*, 
+       `SELECT asig.*, 
               rf.nombre AS ruta_nombre,
               u.nombre AS conductor_nombre,
               v.placa AS vehiculo_placa,
               j.nombre AS jornada_nombre,
               j.hora_inicio AS j_hora_inicio,
-              j.hora_limite_fin
+              j.hora_limite_fin,
+              COALESCE(
+                (SELECT ROUND(COUNT(case when sa.estado = 'completado' then 1 end) * 100.0 / NULLIF(COUNT(sa.id), 0)) 
+                 FROM sectores_asignacion sa 
+                 WHERE sa.asignacion_id = asig.id), 0
+              ) as progreso
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
        JOIN usuarios u ON u.id = asig.conductor_id
