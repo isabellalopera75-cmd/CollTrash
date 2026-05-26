@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { login, registrarConductor, editarConductor, obtenerPerfil, registrarCiudadano } = require('../controllers/authController');
 const { verificarToken, soloAdmin } = require('../middlewares/authMiddleware');
-const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 

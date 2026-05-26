@@ -36,7 +36,7 @@ const startSimulation = async (asignacionId) => {
     let pts = [];
     sectores.rows.forEach(s => {
       if (s.trazado_geom) {
-        try { pts.push(...JSON.parse(s.trazado_geom)); } catch (e) {}
+        try { pts.push(...JSON.parse(s.trazado_geom)); } catch (e) { /* ignore */ }
       }
     });
 

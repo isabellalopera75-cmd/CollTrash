@@ -1,5 +1,4 @@
 const pool = require('../config/database');
-const { getIo } = require('../config/socket');
 const { crearNotificacion } = require('../services/notificacionService');
 
 // Obtener alertas/incidencias activas

@@ -17,7 +17,7 @@ const generarAsignaciones = async (fechaInicio = null) => {
       ? new Date(fechaInicio)
       : new Date();
     
-    const normalizeString = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : '';
+    const { isoDayNumber } = require('../utils/dateHelper');
     
     const expectedAssignments = [];
     const dateRangeStrs = [];
@@ -31,10 +31,10 @@ const generarAsignaciones = async (fechaInicio = null) => {
       const fechaStr = fechaAsignacion.toISOString().split('T')[0];
       dateRangeStrs.push(fechaStr);
       
-      const diaSemanaNombre = normalizeString(fechaAsignacion.toLocaleDateString('es-ES', { weekday: 'long' }));
+      const numeroDiaISO = isoDayNumber(fechaAsignacion);
       
       for (const ruta of rutasFijas.rows) {
-        const correspondeDia = normalizeString(ruta.dias_semana).includes(diaSemanaNombre);
+        const correspondeDia = Array.isArray(ruta.dias_semana_arr) && ruta.dias_semana_arr.includes(numeroDiaISO);
         if (correspondeDia) {
           expectedAssignments.push({
             ruta_fija_id: ruta.id,

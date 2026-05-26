@@ -52,11 +52,11 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
 
 const reasignarAsignacion = async (req, res) => {
   const { id } = req.params;
-  const { conductor_id, vehiculo_id } = req.body;
-  
+  const { conductor_id, vehiculo_id, es_permanente } = req.body;
+
   try {
     const asigActual = await pool.query(
-      `SELECT asig.fecha, asig.estado, asig.conductor_id, asig.ruta_fija_id, rf.jornada_id 
+      `SELECT asig.fecha, asig.estado, asig.ruta_fija_id, rf.jornada_id, rf.conductor_default_id, rf.vehiculo_id 
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
        WHERE asig.id = $1`,
@@ -67,20 +67,21 @@ const reasignarAsignacion = async (req, res) => {
       return res.status(404).json({ mensaje: 'Asignación no encontrada' });
     }
 
-    const { fecha, jornada_id, estado } = asigActual.rows[0];
+    const { fecha, jornada_id, estado, ruta_fija_id, conductor_default_id } = asigActual.rows[0];
 
     if (estado !== 'pendiente') {
       return res.status(400).json({ mensaje: 'Solo se pueden reasignar rutas pendientes.' });
     }
 
+    // Verificar conflictos con otras asignaciones del mismo día/jornada
     const conflictos = await pool.query(
       `SELECT rf.nombre 
-       FROM asignaciones_semanales asig
-       JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
-       WHERE asig.fecha = $1 
-       AND rf.jornada_id = $2 
-       AND asig.id != $3
-       AND (asig.conductor_id = $4 OR asig.vehiculo_id = $5)`,
+       FROM asignaciones_semanales a
+       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+       WHERE a.fecha = $1 
+         AND rf.jornada_id = $2 
+         AND a.id != $3
+         AND (rf.conductor_default_id = $4 OR rf.vehiculo_id = $5)`,
       [fecha, jornada_id, id, conductor_id, vehiculo_id]
     );
 
@@ -90,27 +91,27 @@ const reasignarAsignacion = async (req, res) => {
       });
     }
 
-    const resultado = await pool.query(
-      `UPDATE asignaciones_semanales 
-       SET conductor_id = $1, vehiculo_id = $2
-       WHERE id = $3 RETURNING *`,
-      [conductor_id, vehiculo_id, id]
-    );
-
-    const motivoCambio = req.body.motivo || 'Reasignación diaria manual';
-    const conductorOriginal = asigActual.rows[0].conductor_id || null;
-    
-    try {
+    // Si es permanente, actualizar la ruta fija
+    if (es_permanente) {
       await pool.query(
-        `INSERT INTO cambios_conductor (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin)
-         VALUES ($1, $2, $3, $4, $5, $5)`,
-        [asigActual.rows[0].ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, asigActual.rows[0].fecha]
+        `UPDATE rutas_fijas SET conductor_default_id = $1, vehiculo_id = $2 WHERE id = $3`,
+        [conductor_id, vehiculo_id, ruta_fija_id]
       );
-    } catch (err) {
-      console.error("No se pudo insertar en cambios_conductor:", err.message);
     }
 
-    res.json({ mensaje: 'Asignación reasignada con éxito e historial actualizado', asignacion: resultado.rows[0] });
+    const motivoCambio = req.body.motivo || 'Reasignación diaria manual';
+    const conductorOriginal = conductor_default_id || null;
+
+    // Registrar el cambio (temporal o permanente)
+    await pool.query(
+      `INSERT INTO cambios_conductor 
+       (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, es_permanente)
+       VALUES ($1, $2, $3, $4, $5, $5, $6)`,
+      [ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, fecha, !!es_permanente]
+    );
+
+    // No se actualiza asignaciones_semanales (el conductor se determina vía rutas_fijas y cambios_conductor)
+    res.json({ mensaje: 'Asignación reasignada con éxito', asignacionId: id, permanente: !!es_permanente });
   } catch (error) {
     console.error(error);
     res.status(500).json({ mensaje: 'Error interno al reasignar' });
