@@ -88,10 +88,15 @@ const crearRutaFija = async (req, res) => {
     }
 
     // Guardar la ruta principal
+    const diasArray = dias_semana
+      .split(',')
+      .map(d => parseInt(d.trim()))
+      .filter(d => !isNaN(d));
+
     const resultado = await pool.query(
-      `INSERT INTO rutas_fijas (nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana)
+      `INSERT INTO rutas_fijas (nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana_arr)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana]
+      [nombre, jornada_id, conductor_default_id, vehiculo_id, diasArray]
     );
 
     const rutaFija = resultado.rows[0];
@@ -140,25 +145,22 @@ const crearRutaFija = async (req, res) => {
 const obtenerRutasFijas = async (req, res) => {
   try {
     const resultado = await pool.query(
-      `SELECT rf.*, 
-              u.nombre AS conductor_nombre,
-              v.placa AS vehiculo_placa,
-              j.nombre AS jornada_nombre,
-              j.hora_inicio,
-              j.hora_limite_fin
-       FROM rutas_fijas rf
-       JOIN usuarios u ON u.id = rf.conductor_default_id
-       JOIN vehiculos v ON v.id = rf.vehiculo_id
-       JOIN jornadas j ON j.id = rf.jornada_id
-       WHERE rf.activo = TRUE
-       ORDER BY rf.created_at DESC`
+      `SELECT r.*, j.nombre as jornada_nombre, u.nombre as conductor_nombre, v.placa as vehiculo_placa
+       FROM rutas_fijas r
+       JOIN jornadas j ON r.jornada_id = j.id
+       LEFT JOIN usuarios u ON r.conductor_default_id = u.id
+       LEFT JOIN vehiculos v ON r.vehiculo_id = v.id
+       ORDER BY r.id ASC`
     );
-
-    res.status(200).json({ rutas: resultado.rows });
-
+    const { arrayToString } = require('../utils/dateHelper');
+    const rutas = resultado.rows.map(r => ({
+      ...r,
+      dias_semana: arrayToString(r.dias_semana_arr || [])
+    }));
+    res.status(200).json({ rutas });
   } catch (error) {
-    console.error('Error al obtener rutas:', error.message);
-    res.status(500).json({ mensaje: 'Error interno del servidor.' });
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al obtener rutas fijas' });
   }
 };
 
@@ -260,11 +262,15 @@ const editarRutaFija = async (req, res) => {
            jornada_id = COALESCE($2, jornada_id),
            conductor_default_id = COALESCE($3, conductor_default_id),
            vehiculo_id = COALESCE($4, vehiculo_id),
-           dias_semana = COALESCE($5, dias_semana),
+           dias_semana_arr = COALESCE($5, dias_semana_arr),
            activo = COALESCE($6, activo)
        WHERE id = $7
        RETURNING *`,
-      [nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana, activo, id]
+      [nombre, jornada_id, conductor_default_id, vehiculo_id,
+       (dias_semana && typeof dias_semana === 'string')
+         ? dias_semana.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d))
+         : dias_semana,
+       activo, id]
     );
 
     if (resultado.rows.length === 0) {
