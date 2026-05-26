@@ -5,6 +5,8 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
   try {
     const resultado = await pool.query(
        `SELECT asig.*, 
+              rf.conductor_default_id AS conductor_id,
+              rf.vehiculo_id AS vehiculo_id,
               rf.nombre AS ruta_nombre,
               u.nombre AS conductor_nombre,
               v.placa AS vehiculo_placa,
@@ -18,8 +20,8 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
               ) as progreso
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
-       JOIN usuarios u ON u.id = asig.conductor_id
-       JOIN vehiculos v ON v.id = asig.vehiculo_id
+       JOIN usuarios u ON u.id = rf.conductor_default_id
+       JOIN vehiculos v ON v.id = rf.vehiculo_id
        JOIN jornadas j ON j.id = rf.jornada_id
        WHERE asig.fecha = $1
        ORDER BY j.hora_inicio ASC`,

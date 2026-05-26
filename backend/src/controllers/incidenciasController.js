@@ -13,8 +13,8 @@ const obtenerIncidenciasActivas = async (req, res) => {
        FROM incidencias_conductor i
        JOIN asignaciones_semanales ad ON ad.id = i.asignacion_id
        JOIN rutas_fijas rf ON rf.id = ad.ruta_fija_id
-       JOIN usuarios u ON u.id = ad.conductor_id
-       JOIN vehiculos v ON v.id = ad.vehiculo_id
+       JOIN usuarios u ON u.id = rf.conductor_default_id
+       JOIN vehiculos v ON v.id = rf.vehiculo_id
        WHERE i.resuelto = FALSE
        ORDER BY i.created_at DESC`
     );
@@ -65,8 +65,9 @@ const crearIncidencia = async (req, res) => {
 
   try {
     const asignacion = await pool.query(
-      `SELECT id FROM asignaciones_semanales
-       WHERE id = $1 AND conductor_id = $2 AND estado = 'activa'`,
+      `SELECT a.id FROM asignaciones_semanales a
+       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+       WHERE a.id = $1 AND rf.conductor_default_id = $2 AND a.estado = 'activa'`,
       [asignacion_id, conductor_id]
     );
 

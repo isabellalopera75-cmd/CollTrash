@@ -8,11 +8,11 @@ const startSimulation = async (asignacionId) => {
 
   try {
     const result = await pool.query(
-      `SELECT a.*, v.placa, u.nombre as conductor_nombre, rf.nombre as ruta_nombre 
+      `SELECT a.*, v.placa, u.nombre as conductor_nombre, rf.nombre as ruta_nombre, rf.vehiculo_id
        FROM asignaciones_semanales a
-       JOIN vehiculos v ON v.id = a.vehiculo_id
-       JOIN usuarios u ON u.id = a.conductor_id
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+       JOIN vehiculos v ON v.id = rf.vehiculo_id
+       JOIN usuarios u ON u.id = rf.conductor_default_id
        WHERE a.id = $1`, [asignacionId]
     );
 

@@ -90,13 +90,13 @@ const generarAsignaciones = async (fechaInicio = null) => {
     let paramIndex = 1;
     
     for (const ea of expectedAssignments) {
-      valueClauses.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, 'pendiente')`);
-      params.push(ea.ruta_fija_id, ea.conductor_id, ea.vehiculo_id, ea.fecha);
-      paramIndex += 4;
+      valueClauses.push(`($${paramIndex}, $${paramIndex+1}, 'pendiente')`);
+      params.push(ea.ruta_fija_id, ea.fecha);
+      paramIndex += 2;
     }
     
     const insertQuery = `
-      INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
+      INSERT INTO asignaciones_semanales (ruta_fija_id, fecha, estado)
       VALUES ${valueClauses.join(', ')}
       ON CONFLICT (ruta_fija_id, fecha) DO NOTHING
       RETURNING id, ruta_fija_id

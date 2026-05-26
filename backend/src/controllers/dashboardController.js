@@ -96,7 +96,8 @@ const dashboardMensual = async (req, res) => {
         ROUND(AVG(e.porcentaje_cumplimiento), 2) AS porcentaje_promedio
        FROM eficiencia_rutas e
        JOIN asignaciones_semanales a ON a.id = e.asignacion_id
-       JOIN usuarios u ON u.id = a.conductor_id
+       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+       JOIN usuarios u ON u.id = rf.conductor_default_id
        WHERE a.fecha BETWEEN $1 AND $2
        GROUP BY u.nombre`,
       [primerDia.toISOString().split('T')[0], ultimoDia.toISOString().split('T')[0]]
@@ -128,8 +129,8 @@ const reporteEficiencia = async (req, res) => {
       FROM eficiencia_rutas e
       JOIN asignaciones_semanales a ON a.id = e.asignacion_id
       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-      JOIN usuarios u ON u.id = a.conductor_id
-      JOIN vehiculos v ON v.id = a.vehiculo_id
+      JOIN usuarios u ON u.id = rf.conductor_default_id
+      JOIN vehiculos v ON v.id = rf.vehiculo_id
       WHERE a.fecha BETWEEN $1 AND $2
       ORDER BY a.fecha DESC
     `;

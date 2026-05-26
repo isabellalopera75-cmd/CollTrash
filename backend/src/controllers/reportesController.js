@@ -7,7 +7,7 @@ const notificarConductorReporteAsignado = async (asignacionId, reporte) => {
   if (!asignacionId || !reporte) return;
 
   const asignacionRes = await pool.query(
-    `SELECT a.conductor_id, rf.nombre AS ruta_nombre, a.fecha
+    `SELECT rf.conductor_default_id AS conductor_id, rf.nombre AS ruta_nombre, a.fecha
      FROM asignaciones_semanales a
      JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
      WHERE a.id = $1`,
@@ -222,9 +222,9 @@ const actualizarEstado = async (req, res) => {
             } else {
               // Si no existe, la creamos dinámicamente para ese día
               const insertRes = await pool.query(
-                `INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
-                 VALUES ($1, $2, $3, $4, 'pendiente') RETURNING id`,
-                [rutaFijaId, infoRuta.rows[0].conductor_default_id, infoRuta.rows[0].vehiculo_id, targetFecha]
+                `INSERT INTO asignaciones_semanales (ruta_fija_id, fecha, estado)
+                 VALUES ($1, $2, 'pendiente') RETURNING id`,
+                [rutaFijaId, targetFecha]
               );
               finalAsignacionId = insertRes.rows[0].id;
 

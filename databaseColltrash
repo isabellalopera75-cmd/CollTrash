@@ -1,0 +1,249 @@
+CREATE TABLE usuarios (
+    id INTEGER PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    rol VARCHAR(20) NOT NULL,
+    activo BOOLEAN DEFAULT true,
+    cedula VARCHAR(20),
+    telefono VARCHAR(20),
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE vehiculos (
+    id INTEGER PRIMARY KEY,
+    placa VARCHAR(10) NOT NULL UNIQUE,
+    modelo VARCHAR(100) NOT NULL,
+    capacidad_ton NUMERIC(6,2) NOT NULL,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE jornadas (
+    id INTEGER PRIMARY KEY,
+    nombre VARCHAR(20) NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_limite_fin TIME NOT NULL,
+    margen_tardio_min INTEGER DEFAULT 30,
+    margen_no_asistido_min INTEGER DEFAULT 60
+);
+
+CREATE TABLE barrios (
+    id INTEGER PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL UNIQUE,
+    sector VARCHAR(100),
+    latitud_centro NUMERIC(10,7),
+    longitud_centro NUMERIC(10,7)
+);
+
+CREATE TABLE ciudadanos (
+    id INTEGER PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    foto_perfil VARCHAR(500),
+    password_hash VARCHAR(255),
+    barrio_id INTEGER,
+    created_at TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (barrio_id) REFERENCES barrios(id)
+);
+
+CREATE TABLE configuracion (
+    clave VARCHAR(200) PRIMARY KEY,
+    valor TEXT
+);
+
+CREATE TABLE puntos_descarga (
+    id INTEGER PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    latitud_centro NUMERIC(10,7) NOT NULL,
+    longitud_centro NUMERIC(10,7) NOT NULL,
+    tipo VARCHAR(50) DEFAULT 'relleno',
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE rutas_fijas (
+    id INTEGER PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    jornada_id INTEGER NOT NULL,
+    conductor_default_id INTEGER NOT NULL,
+    vehiculo_id INTEGER NOT NULL,
+    dias_semana_arr VARCHAR(50),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (jornada_id) REFERENCES jornadas(id),
+    FOREIGN KEY (conductor_default_id) REFERENCES usuarios(id),
+    FOREIGN KEY (vehiculo_id) REFERENCES vehiculos(id)
+);
+
+CREATE TABLE sectores_ruta (
+    id INTEGER PRIMARY KEY,
+    ruta_fija_id INTEGER NOT NULL,
+    nombre VARCHAR(150) NOT NULL,
+    orden INTEGER NOT NULL,
+    trazado_geom TEXT NOT NULL,
+    porcentaje_requerido NUMERIC(5,2) DEFAULT 90.00,
+    FOREIGN KEY (ruta_fija_id) REFERENCES rutas_fijas(id)
+);
+
+CREATE TABLE asignaciones_semanales (
+    id INTEGER PRIMARY KEY,
+    ruta_fija_id INTEGER NOT NULL,
+    fecha DATE NOT NULL,
+    estado VARCHAR(30) DEFAULT 'pendiente',
+    inicio_tardio BOOLEAN DEFAULT false,
+    tipo_cierre VARCHAR(30),
+    hora_inicio_real TIMESTAMP,
+    hora_fin_real TIMESTAMP,
+    km_recorridos NUMERIC(10,2) DEFAULT 0,
+    habilitado_por_admin BOOLEAN DEFAULT false,
+    justificacion_tardio TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (ruta_fija_id) REFERENCES rutas_fijas(id)
+);
+
+CREATE TABLE sectores_asignacion (
+    id INTEGER PRIMARY KEY,
+    asignacion_id INTEGER NOT NULL,
+    sector_id INTEGER NOT NULL,
+    estado VARCHAR(20) DEFAULT 'pendiente',
+    porcentaje_recorrido NUMERIC(5,2) DEFAULT 0,
+    completado_at TIMESTAMP,
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id),
+    FOREIGN KEY (sector_id) REFERENCES sectores_ruta(id)
+);
+
+CREATE TABLE cambios_conductor (
+    id INTEGER PRIMARY KEY,
+    ruta_fija_id INTEGER NOT NULL,
+    conductor_original_id INTEGER NOT NULL,
+    conductor_reemplazante_id INTEGER NOT NULL,
+    motivo TEXT NOT NULL,
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE,
+    es_permanente BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (ruta_fija_id) REFERENCES rutas_fijas(id),
+    FOREIGN KEY (conductor_original_id) REFERENCES usuarios(id),
+    FOREIGN KEY (conductor_reemplazante_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE rastreo_gps (
+    id INTEGER PRIMARY KEY,
+    asignacion_id INTEGER NOT NULL,
+    latitud NUMERIC(10,7) NOT NULL,
+    longitud NUMERIC(10,7) NOT NULL,
+    registrado_at TIMESTAMP DEFAULT now(),
+    sincronizado BOOLEAN DEFAULT false,
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id)
+);
+
+CREATE TABLE puntos_temporales (
+    id INTEGER PRIMARY KEY,
+    asignacion_id INTEGER NOT NULL,
+    sector_id INTEGER NOT NULL,
+    latitud NUMERIC(10,7) NOT NULL,
+    longitud NUMERIC(10,7) NOT NULL,
+    descripcion VARCHAR(300),
+    visitado BOOLEAN DEFAULT false,
+    visitado_at TIMESTAMP,
+    motivo VARCHAR(100),
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id),
+    FOREIGN KEY (sector_id) REFERENCES sectores_ruta(id)
+);
+
+CREATE TABLE descargas (
+    id INTEGER PRIMARY KEY,
+    asignacion_id INTEGER NOT NULL,
+    sector_asignacion_id INTEGER NOT NULL,
+    punto_descarga_id INTEGER,
+    punto_pausa_lat NUMERIC(10,7) NOT NULL,
+    punto_pausa_lng NUMERIC(10,7) NOT NULL,
+    punto_descarga_lat NUMERIC(10,7) NOT NULL,
+    punto_descarga_lng NUMERIC(10,7) NOT NULL,
+    hora_salida TIMESTAMP NOT NULL,
+    hora_regreso TIMESTAMP,
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id),
+    FOREIGN KEY (sector_asignacion_id) REFERENCES sectores_asignacion(id),
+    FOREIGN KEY (punto_descarga_id) REFERENCES puntos_descarga(id)
+);
+
+CREATE TABLE incidencias_conductor (
+    id INTEGER PRIMARY KEY,
+    asignacion_id INTEGER,
+    conductor_id INTEGER NOT NULL,
+    tipo VARCHAR(20) NOT NULL,
+    descripcion TEXT NOT NULL,
+    resuelto BOOLEAN DEFAULT false,
+    resolucion TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id),
+    FOREIGN KEY (conductor_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE eficiencia_rutas (
+    id INTEGER PRIMARY KEY,
+    asignacion_id INTEGER NOT NULL UNIQUE,
+    km_recorridos NUMERIC(8,2),
+    toneladas NUMERIC(6,2),
+    tiempo_minutos INTEGER,
+    sectores_completados INTEGER DEFAULT 0,
+    sectores_totales INTEGER DEFAULT 0,
+    porcentaje_cumplimiento NUMERIC(5,2),
+    num_descargas INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id)
+);
+
+CREATE TABLE reportes_ciudadanos (
+    id INTEGER PRIMARY KEY,
+    ciudadano_id INTEGER,
+    asignacion_id INTEGER,
+    latitud NUMERIC(10,7) NOT NULL,
+    longitud NUMERIC(10,7) NOT NULL,
+    descripcion TEXT NOT NULL,
+    foto_url VARCHAR(500),
+    estado VARCHAR(20) DEFAULT 'pendiente',
+    tipo_problema VARCHAR(100),
+    nombre_ciudadano VARCHAR(100),
+    justificacion_rechazo TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    atendido_at TIMESTAMP,
+    FOREIGN KEY (ciudadano_id) REFERENCES ciudadanos(id),
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id)
+);
+
+CREATE TABLE auditoria (
+    id INTEGER PRIMARY KEY,
+    usuario_id INTEGER,
+    accion VARCHAR(255) NOT NULL,
+    entidad VARCHAR(50),
+    entidad_id INTEGER,
+    detalles TEXT,
+    fecha TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE notificaciones (
+    id INTEGER PRIMARY KEY,
+    usuario_id INTEGER,
+    titulo VARCHAR(100),
+    mensaje TEXT,
+    tipo VARCHAR(50),
+    leida BOOLEAN DEFAULT false,
+    metadata TEXT,
+    fecha TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE TABLE novedades_operativas (
+    id INTEGER PRIMARY KEY,
+    asignacion_id INTEGER,
+    admin_id INTEGER,
+    tipo_novedad VARCHAR(50),
+    descripcion TEXT,
+    fecha TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (asignacion_id) REFERENCES asignaciones_semanales(id),
+    FOREIGN KEY (admin_id) REFERENCES usuarios(id)
+);

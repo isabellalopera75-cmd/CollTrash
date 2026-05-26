@@ -4,7 +4,7 @@ const { crearNotificacion } = require('../services/notificacionService');
 
 const obtenerAsignacionConductor = async (asignacionId, conductorId) => {
   const resultado = await pool.query(
-    'SELECT * FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2',
+    'SELECT a.* FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2',
     [asignacionId, conductorId]
   );
   return resultado.rows[0] || null;
@@ -28,7 +28,7 @@ const iniciarRuta = async (req, res) => {
 
   try {
     const asignacion = await pool.query(
-      'SELECT * FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2',
+      'SELECT a.* FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2',
       [id, conductorId]
     );
 
@@ -351,7 +351,7 @@ const finalizarRuta = async (req, res) => {
 
       // Verificar que no haya sido completada por el simulador simultáneamente
       const checkEstado = await client.query(
-        'SELECT estado, hora_inicio_real FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2 FOR UPDATE',
+        'SELECT a.estado, a.hora_inicio_real FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2 FOR UPDATE',
         [id, conductorId]
       );
 
@@ -377,7 +377,10 @@ const finalizarRuta = async (req, res) => {
       await client.query(
         `UPDATE asignaciones_semanales 
          SET estado = 'completada', hora_fin_real = NOW()
-         WHERE id = $1 AND conductor_id = $2`,
+         WHERE id = $1
+         AND ruta_fija_id IN (
+           SELECT id FROM rutas_fijas WHERE conductor_default_id = $2
+         )`,
         [id, conductorId]
       );
 

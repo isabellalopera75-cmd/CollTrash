@@ -44,9 +44,9 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
               ) AS progreso_recorrido
        FROM asignaciones_semanales a
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-       JOIN vehiculos    v  ON v.id  = a.vehiculo_id
+       JOIN vehiculos    v  ON v.id  = rf.vehiculo_id
        JOIN jornadas     j  ON j.id  = rf.jornada_id
-        WHERE a.conductor_id = $1 AND a.fecha = $2
+        WHERE rf.conductor_default_id = $1 AND a.fecha = $2
         ORDER BY 
           CASE 
             WHEN a.estado = 'activa' THEN 0
@@ -142,7 +142,8 @@ router.put('/reporte/:reporteId/resolver', verificarToken, async (req, res) => {
       `SELECT r.id 
        FROM reportes_ciudadanos r
        JOIN asignaciones_semanales a ON a.id = r.asignacion_id
-       WHERE r.id = $1 AND a.conductor_id = $2 AND a.estado = 'activa'`,
+       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+       WHERE r.id = $1 AND rf.conductor_default_id = $2 AND a.estado = 'activa'`,
       [reporteId, conductorId]
     );
 
