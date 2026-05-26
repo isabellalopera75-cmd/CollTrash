@@ -19,6 +19,16 @@ export default function Reportes() {
 
   useEffect(() => { cargarReportes(); }, []);
 
+  const fechaColombia = (dias = 0) => {
+    const ahora = new Date();
+    const colombia = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    colombia.setDate(colombia.getDate() + dias);
+    const yyyy = colombia.getFullYear();
+    const mm = String(colombia.getMonth() + 1).padStart(2, '0');
+    const dd = String(colombia.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const cargarReportes = async () => {
     try {
       const res = await obtenerReportes();
@@ -30,11 +40,8 @@ export default function Reportes() {
   const handleVerDetalle = async (reporte) => {
     setReporteSeleccionado(reporte);
     try {
-      const mañana = new Date(); mañana.setDate(mañana.getDate() + 1);
-      const pasado = new Date(); pasado.setDate(pasado.getDate() + 2);
-      
-      const resMañana = await obtenerAsignaciones(mañana.toISOString().split('T')[0]);
-      const resPasado = await obtenerAsignaciones(pasado.toISOString().split('T')[0]);
+      const resMañana = await obtenerAsignaciones(fechaColombia(1));
+      const resPasado = await obtenerAsignaciones(fechaColombia(2));
       
       setAsignacionesDisponibles([
         ...(resMañana.data.asignaciones || []),
@@ -51,7 +58,7 @@ export default function Reportes() {
       await actualizarEstadoReporte(reporteSeleccionado.id, {
         estado: accion === 'aceptar' ? 'en_proceso' : 'rechazado',
         justificacion_rechazo: justificacion,
-        asignacion_semanal_id: asignacionId // Guarda la ID de la asignación real
+        asignacion_id: asignacionId
       });
       alert(accion === 'aceptar' ? '✅ Reporte aceptado y agendado.' : '❌ Reporte rechazado. Se notificará al ciudadano.');
       setMostrarModal(false);

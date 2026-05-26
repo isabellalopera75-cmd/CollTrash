@@ -16,6 +16,7 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT a.id,
+              a.fecha,
               rf.nombre        AS ruta_nombre,
               v.placa          AS vehiculo_placa,
               v.modelo         AS vehiculo_modelo,
@@ -23,7 +24,24 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
               j.hora_inicio,
               j.hora_limite_fin,
               a.estado,
-              a.hora_inicio_real
+              a.hora_inicio_real,
+              a.km_recorridos,
+              EXISTS (
+                SELECT 1
+                FROM sectores_asignacion sa
+                WHERE sa.asignacion_id = a.id
+              ) AND NOT EXISTS (
+                SELECT 1
+                FROM sectores_asignacion sa
+                WHERE sa.asignacion_id = a.id
+                  AND sa.estado != 'completado'
+                  AND COALESCE(sa.porcentaje_recorrido, 0) < 100
+              ) AS ruta_recorrida,
+              (
+                SELECT COALESCE(ROUND(AVG(COALESCE(sa.porcentaje_recorrido, 0))), 0)
+                FROM sectores_asignacion sa
+                WHERE sa.asignacion_id = a.id
+              ) AS progreso_recorrido
        FROM asignaciones_semanales a
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
        JOIN vehiculos    v  ON v.id  = a.vehiculo_id
@@ -71,7 +89,7 @@ router.get('/mis-paradas/:asignacionId', verificarToken, async (req, res) => {
               sr.nombre,
               sr.orden,
               sr.trazado_geom,
-              sr.porcentaje_completitud_requerido AS porcentaje_requerido,
+              sr.porcentaje_requerido,
               sa.estado,
               sa.porcentaje_recorrido,
               sa.completado_at

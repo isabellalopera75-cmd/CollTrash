@@ -57,18 +57,35 @@ const crearIncidencia = async (req, res) => {
   const { asignacion_id, tipo, descripcion } = req.body;
   const conductor_id = req.usuario.id;
   if (!tipo) return res.status(400).json({ mensaje: 'El tipo de incidencia es obligatorio.' });
+  if (!asignacion_id) return res.status(400).json({ mensaje: 'La asignacion es obligatoria para reportar una incidencia.' });
+
+  const tiposPermitidos = ['trancon', 'accidente', 'contenedor_lleno', 'via_bloqueada'];
+  if (!tiposPermitidos.includes(tipo)) {
+    return res.status(400).json({ mensaje: `Tipo debe ser uno de: ${tiposPermitidos.join(', ')}` });
+  }
+
   try {
+    const asignacion = await pool.query(
+      `SELECT id FROM asignaciones_semanales
+       WHERE id = $1 AND conductor_id = $2 AND estado = 'activa'`,
+      [asignacion_id, conductor_id]
+    );
+
+    if (asignacion.rows.length === 0) {
+      return res.status(403).json({ mensaje: 'No autorizado. La incidencia debe pertenecer a una ruta activa.' });
+    }
+
     const r = await pool.query(
       `INSERT INTO incidencias_conductor (asignacion_id, conductor_id, tipo, descripcion, resuelto)
        VALUES ($1, $2, $3, $4, FALSE) RETURNING *`,
-      [asignacion_id || null, conductor_id, tipo, descripcion || '']
+      [asignacion_id, conductor_id, tipo, descripcion || '']
     );
 
     // NOTIFICAR ADMIN: Nueva incidencia
     await crearNotificacion({
-      titulo: tipo === 'accidente' || tipo === 'falla_mecanica' ? '🚨 Incidencia Crítica' : '⚠️ Novedad en Ruta',
+      titulo: tipo === 'accidente' ? '🚨 Incidencia Crítica' : '⚠️ Novedad en Ruta',
       mensaje: `Conductor ${req.usuario.nombre}: ${tipo}. ${descripcion || ''}`,
-      tipo: tipo === 'accidente' || tipo === 'falla_mecanica' ? 'urgente' : 'operativo',
+      tipo: tipo === 'accidente' ? 'urgente' : 'operativo',
       metadata: { asignacion_id: asignacion_id, incidencia_id: r.rows[0].id, tipo: 'INCIDENCIA' }
     });
 

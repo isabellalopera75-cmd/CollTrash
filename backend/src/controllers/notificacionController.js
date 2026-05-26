@@ -2,8 +2,14 @@ const pool = require('../config/database');
 
 const obtenerNotificaciones = async (req, res) => {
   try {
+    const { id, rol } = req.usuario;
+    const filtro = rol === 'administrador'
+      ? 'WHERE usuario_id IS NULL OR usuario_id = $1'
+      : 'WHERE usuario_id = $1';
+
     const resultado = await pool.query(
-      'SELECT * FROM notificaciones ORDER BY fecha DESC LIMIT 20'
+      `SELECT * FROM notificaciones ${filtro} ORDER BY fecha DESC LIMIT 20`,
+      [id]
     );
     res.json({ notificaciones: resultado.rows });
   } catch (error) {
@@ -15,7 +21,12 @@ const obtenerNotificaciones = async (req, res) => {
 const marcarLeida = async (req, res) => {
   const { id } = req.params;
   try {
-    await pool.query('UPDATE notificaciones SET leida = TRUE WHERE id = $1', [id]);
+    const usuarioId = req.usuario.id;
+    const filtro = req.usuario.rol === 'administrador'
+      ? '(usuario_id IS NULL OR usuario_id = $2)'
+      : 'usuario_id = $2';
+
+    await pool.query(`UPDATE notificaciones SET leida = TRUE WHERE id = $1 AND ${filtro}`, [id, usuarioId]);
     res.json({ mensaje: 'Notificación marcada como leída' });
   } catch (error) {
     console.error(error);
@@ -25,7 +36,12 @@ const marcarLeida = async (req, res) => {
 
 const marcarTodasLeidas = async (req, res) => {
   try {
-    await pool.query('UPDATE notificaciones SET leida = TRUE');
+    const usuarioId = req.usuario.id;
+    const filtro = req.usuario.rol === 'administrador'
+      ? 'usuario_id IS NULL OR usuario_id = $1'
+      : 'usuario_id = $1';
+
+    await pool.query(`UPDATE notificaciones SET leida = TRUE WHERE ${filtro}`, [usuarioId]);
     res.json({ mensaje: 'Todas las notificaciones marcadas como leídas' });
   } catch (error) {
     console.error(error);

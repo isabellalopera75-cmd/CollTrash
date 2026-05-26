@@ -13,7 +13,7 @@ function MapCenterer({ center }) {
 
 // ─── Tab Ruta ────────────────────────────────────────────────
 export function TabRuta({ paradas, posicion, asignacion, reportesCiudadanos = [] }) {
-  const activa = paradas.find(p => p.estado === 'en_curso') || paradas.find(p => p.estado === 'pendiente');
+  const activa = paradas.find(p => p.estado === 'en_curso' || p.estado === 'en_progreso') || paradas.find(p => p.estado === 'pendiente');
   const centro = posicion || [2.9273, -75.2819];
   
   // Construir trazado de todos los sectores
@@ -45,7 +45,7 @@ export function TabRuta({ paradas, posicion, asignacion, reportesCiudadanos = []
           {paradas.map(p => {
             const c = centroPunto(p);
             if (!c) return null;
-            const color = p.estado === 'completado' ? '#22c55e' : p.estado === 'en_curso' ? '#F59E0B' : '#6b7280';
+            const color = p.estado === 'completado' ? '#22c55e' : (p.estado === 'en_curso' || p.estado === 'en_progreso') ? '#F59E0B' : '#6b7280';
             return (
               <CircleMarker key={p.id} center={c} radius={8} color="white" weight={2} fillColor={color} fillOpacity={1}>
                 <Popup>{p.nombre}</Popup>
@@ -118,7 +118,7 @@ export function TabParadas({ paradas, onCompletar, completando, reportesCiudadan
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {paradas.map(p => {
             const completada = p.estado === 'completado';
-            const activa = p.estado === 'en_curso';
+            const activa = p.estado === 'en_curso' || p.estado === 'en_progreso';
             return (
               <div key={p.id} style={{
                 padding: '14px',

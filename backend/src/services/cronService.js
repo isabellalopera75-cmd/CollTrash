@@ -156,7 +156,7 @@ cron.schedule('0 2 * * *', async () => {
   console.log('🕒 Iniciando limpieza de registros GPS antiguos (TTL > 48h)...');
   try {
     const res = await pool.query(
-      "DELETE FROM rastreo_gps WHERE timestamp < NOW() - INTERVAL '48 hours'"
+      "DELETE FROM rastreo_gps WHERE registrado_at < NOW() - INTERVAL '48 hours'"
     );
     console.log(`✅ Limpieza completada: ${res.rowCount} registros GPS eliminados.`);
   } catch (err) {

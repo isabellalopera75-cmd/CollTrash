@@ -11,8 +11,11 @@ const crearNotificacion = async ({ usuario_id, titulo, mensaje, tipo, metadata }
 
     const io = getIo();
     if (io) {
-      // Emitir a todos los admins conectados (puedes filtrar por roles si tienes IDs de socket)
-      io.emit('notificacion_nueva', res.rows[0]);
+      if (usuario_id) {
+        io.to(`usuario:${usuario_id}`).emit('notificacion_nueva', res.rows[0]);
+      } else {
+        io.to('rol:administrador').emit('notificacion_nueva', res.rows[0]);
+      }
     }
     return res.rows[0];
   } catch (error) {

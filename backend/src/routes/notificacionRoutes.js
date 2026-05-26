@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { obtenerNotificaciones, marcarLeida, marcarTodasLeidas } = require('../controllers/notificacionController');
-const { verificarToken, soloAdmin } = require('../middlewares/authMiddleware');
+const { verificarToken } = require('../middlewares/authMiddleware');
 
-router.get('/', verificarToken, soloAdmin, obtenerNotificaciones);
-router.put('/:id/leer', verificarToken, soloAdmin, marcarLeida);
-router.put('/leer-todo', verificarToken, soloAdmin, marcarTodasLeidas);
+router.get('/', verificarToken, obtenerNotificaciones);
+router.put('/:id/leer', verificarToken, marcarLeida);
+router.put('/leer-todo', verificarToken, marcarTodasLeidas);
 
 module.exports = router;

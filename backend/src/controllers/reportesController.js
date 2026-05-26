@@ -3,6 +3,35 @@ const { crearNotificacion } = require('../services/notificacionService');
 const { getIo } = require('../config/socket');
 require('dotenv').config();
 
+const notificarConductorReporteAsignado = async (asignacionId, reporte) => {
+  if (!asignacionId || !reporte) return;
+
+  const asignacionRes = await pool.query(
+    `SELECT a.conductor_id, rf.nombre AS ruta_nombre, a.fecha
+     FROM asignaciones_semanales a
+     JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+     WHERE a.id = $1`,
+    [asignacionId]
+  );
+
+  if (asignacionRes.rows.length === 0 || !asignacionRes.rows[0].conductor_id) return;
+
+  const asignacion = asignacionRes.rows[0];
+  await crearNotificacion({
+    usuario_id: asignacion.conductor_id,
+    titulo: 'Reporte ciudadano asignado',
+    mensaje: `Tienes un reporte de ${reporte.tipo_problema} asignado a la ruta ${asignacion.ruta_nombre}.`,
+    tipo: 'comunidad',
+    metadata: {
+      tipo: 'REPORTE_ASIGNADO',
+      reporte_id: reporte.id,
+      asignacion_id: asignacionId,
+      ruta_nombre: asignacion.ruta_nombre,
+      fecha: asignacion.fecha
+    }
+  });
+};
+
 const crearReporte = async (req, res) => {
   const { latitud, longitud, descripcion, tipo_problema, nombre_ciudadano, barrio_id, descripcion_extra } = req.body;
   
@@ -81,6 +110,30 @@ const atenderReporte = async (req, res) => {
   const { asignacion_id } = req.body;
 
   try {
+    if (!asignacion_id) {
+      return res.status(400).json({ mensaje: 'Debe seleccionar una asignacion para atender el reporte.' });
+    }
+
+    const asignacionValida = await pool.query(
+      `SELECT estado, fecha
+       FROM asignaciones_semanales
+       WHERE id = $1`,
+      [asignacion_id]
+    );
+
+    if (asignacionValida.rows.length === 0) {
+      return res.status(400).json({ mensaje: 'La asignacion seleccionada no existe.' });
+    }
+
+    const destino = asignacionValida.rows[0];
+    if (!['pendiente', 'activa'].includes(destino.estado)) {
+      return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta cerrada.' });
+    }
+
+    if (new Date(destino.fecha) < new Date(new Date().toISOString().split('T')[0])) {
+      return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta pasada.' });
+    }
+
     const reporte = await pool.query(
       `UPDATE reportes_ciudadanos SET estado = 'en_proceso', asignacion_id = $1, atendido_at = NOW()
        WHERE id = $2 RETURNING *`,
@@ -96,6 +149,9 @@ const atenderReporte = async (req, res) => {
     if (io) {
       io.emit('reporte_actualizado', reporte.rows[0]);
     }
+
+    await notificarConductorReporteAsignado(asignacion_id, reporte.rows[0])
+      .catch(notiErr => console.error('Error al notificar conductor:', notiErr.message));
 
     res.status(200).json({ mensaje: 'Reporte atendido correctamente.' });
   } catch (error) {
@@ -114,6 +170,10 @@ const rechazarReporte = async (req, res) => {
       [justificacion, id]
     );
 
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
+    }
+
     // Emitir por Socket.io en tiempo real
     const io = getIo();
     if (io) {
@@ -129,9 +189,9 @@ const rechazarReporte = async (req, res) => {
 
 const actualizarEstado = async (req, res) => {
   const { id } = req.params;
-  const { estado, justificacion_rechazo, ruta_id, asignacion_id, fecha_programada } = req.body;
+  const { estado, justificacion_rechazo, ruta_id, asignacion_id, asignacion_semanal_id, fecha_programada } = req.body;
 
-  const targetId = asignacion_id || ruta_id;
+  const targetId = asignacion_id || asignacion_semanal_id || ruta_id;
 
   try {
     let resultado;
@@ -195,6 +255,32 @@ const actualizarEstado = async (req, res) => {
         }
       }
 
+      if (!finalAsignacionId) {
+        return res.status(400).json({ mensaje: 'Debe seleccionar una asignacion para atender el reporte.' });
+      }
+
+      if (finalAsignacionId) {
+        const asignacionValida = await pool.query(
+          `SELECT estado, fecha
+           FROM asignaciones_semanales
+           WHERE id = $1`,
+          [finalAsignacionId]
+        );
+
+        if (asignacionValida.rows.length === 0) {
+          return res.status(400).json({ mensaje: 'La asignacion seleccionada no existe.' });
+        }
+
+        const destino = asignacionValida.rows[0];
+        if (!['pendiente', 'activa'].includes(destino.estado)) {
+          return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta cerrada.' });
+        }
+
+        if (new Date(destino.fecha) < new Date(new Date().toISOString().split('T')[0])) {
+          return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta pasada.' });
+        }
+      }
+
       const msjAceptado = `Programado para recolección en la ruta: ${targetRutaNombre || 'asignada'} (${targetFecha || fecha_programada || 'Próximas 48h'})`;
       
       resultado = await pool.query(
@@ -225,6 +311,11 @@ const actualizarEstado = async (req, res) => {
     const io = getIo();
     if (io) {
       io.emit('reporte_actualizado', resultado.rows[0]);
+    }
+
+    if ((estado === 'en_proceso' || estado === 'atendido' || estado === 'resuelto') && finalAsignacionId) {
+      await notificarConductorReporteAsignado(finalAsignacionId, resultado.rows[0])
+        .catch(notiErr => console.error('Error al notificar conductor:', notiErr.message));
     }
 
     res.status(200).json({ mensaje: 'Estado de reporte actualizado.', reporte: resultado.rows[0] });

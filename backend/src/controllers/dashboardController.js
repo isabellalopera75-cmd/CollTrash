@@ -30,7 +30,11 @@ const dashboardDiario = async (req, res) => {
     );
 
     const reportesPendientes = await pool.query(
-      "SELECT COUNT(*) AS pendientes FROM reportes_ciudadanos WHERE estado = 'pendiente'"
+      `SELECT COUNT(*) AS pendientes
+       FROM reportes_ciudadanos
+       WHERE estado = 'pendiente'
+         AND created_at >= ($1::date - INTERVAL '1 day')`,
+      [hoy]
     );
 
     res.status(200).json({

@@ -56,7 +56,7 @@ const reasignarAsignacion = async (req, res) => {
   
   try {
     const asigActual = await pool.query(
-      `SELECT asig.fecha, asig.conductor_id, asig.ruta_fija_id, rf.jornada_id 
+      `SELECT asig.fecha, asig.estado, asig.conductor_id, asig.ruta_fija_id, rf.jornada_id 
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
        WHERE asig.id = $1`,
@@ -67,7 +67,11 @@ const reasignarAsignacion = async (req, res) => {
       return res.status(404).json({ mensaje: 'Asignación no encontrada' });
     }
 
-    const { fecha, jornada_id } = asigActual.rows[0];
+    const { fecha, jornada_id, estado } = asigActual.rows[0];
+
+    if (estado !== 'pendiente') {
+      return res.status(400).json({ mensaje: 'Solo se pueden reasignar rutas pendientes.' });
+    }
 
     const conflictos = await pool.query(
       `SELECT rf.nombre 
@@ -98,9 +102,9 @@ const reasignarAsignacion = async (req, res) => {
     
     try {
       await pool.query(
-        `INSERT INTO cambios_conductor (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, tipo_cambio)
-         VALUES ($1, $2, $3, $4, $5, $5, $6)`,
-        [asigActual.rows[0].ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, asigActual.rows[0].fecha, 'temporal']
+        `INSERT INTO cambios_conductor (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin)
+         VALUES ($1, $2, $3, $4, $5, $5)`,
+        [asigActual.rows[0].ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, asigActual.rows[0].fecha]
       );
     } catch (err) {
       console.error("No se pudo insertar en cambios_conductor:", err.message);

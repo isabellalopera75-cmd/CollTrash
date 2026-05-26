@@ -31,16 +31,34 @@ const iniciarSocket = (server) => {
   });
 
   io.on('connection', (socket) => {
+    const usuario = socket.data.usuario;
+    if (usuario?.id) socket.join(`usuario:${usuario.id}`);
+    if (usuario?.rol) socket.join(`rol:${usuario.rol}`);
+
     console.log(`Socket conectado: ${socket.id}`);
     
     // El conductor envía su ubicación simulada
-    socket.on('actualizar_ubicacion', (data) => {
-      // Emitimos a todos (el panel de admin lo escuchará)
-      io.emit('ubicacion_vehiculo', data);
+    socket.on('actualizar_ubicacion', async (data) => {
+      if (usuario?.rol !== 'conductor' || !data?.asignacion_id) return;
+
+      try {
+        const pool = require('./database');
+        const asignacion = await pool.query(
+          `SELECT id FROM asignaciones_semanales
+           WHERE id = $1 AND conductor_id = $2 AND estado = 'activa'`,
+          [data.asignacion_id, usuario.id]
+        );
+
+        if (asignacion.rows.length === 0) return;
+        io.emit('ubicacion_vehiculo', data);
+      } catch (error) {
+        console.error('Error validando ubicacion socket:', error.message);
+      }
     });
 
     // El conductor envía una novedad
     socket.on('enviar_novedad', (data) => {
+      if (usuario?.rol !== 'conductor') return;
       io.emit('nueva_novedad', data);
     });
 

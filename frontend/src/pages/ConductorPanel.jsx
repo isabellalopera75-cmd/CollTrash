@@ -9,6 +9,22 @@ import { io } from 'socket.io-client';
 const NEIVA = [2.9273, -75.2819];
 const FAKE_TRAZADO = [[2.927,-75.282],[2.929,-75.283],[2.931,-75.284],[2.933,-75.285],[2.935,-75.284],[2.936,-75.282],[2.937,-75.280],[2.938,-75.278]];
 
+const fechaColombia = (dias = 0) => {
+  const ahora = new Date();
+  const colombia = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+  colombia.setDate(colombia.getDate() + dias);
+  const yyyy = colombia.getFullYear();
+  const mm = String(colombia.getMonth() + 1).padStart(2, '0');
+  const dd = String(colombia.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const normalizarFecha = (fecha) => {
+  if (!fecha) return null;
+  if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) return fecha;
+  return new Date(fecha).toISOString().split('T')[0];
+};
+
 export default function ConductorPanel() {
   const { usuario, cerrarSesion } = useAuth();
   const navigate = useNavigate();
@@ -21,9 +37,11 @@ export default function ConductorPanel() {
   const [completando, setCompletando] = useState(false);
   const [posicion, setPosicion] = useState(NEIVA);
   const [progreso, setProgreso] = useState(0);
+  const [rutaRecorrida, setRutaRecorrida] = useState(false);
   const simRef = useRef(null);
   const timerRef = useRef(null);
   const socketRef = useRef(null);
+  const reportesAvisadosRef = useRef('');
   const [tiempoMin, setTiempoMin] = useState(0);
   const [mostrarModalTardio, setMostrarModalTardio] = useState(false);
   const [justificacionTardio, setJustificacionTardio] = useState('');
@@ -41,6 +59,13 @@ export default function ConductorPanel() {
     socketRef.current = io(socketUrl, {
       auth: { token }
     });
+    socketRef.current.on('notificacion_nueva', (notificacion) => {
+      if (notificacion?.metadata?.tipo !== 'REPORTE_ASIGNADO') return;
+
+      alert(`ATENCION CONDUCTOR:\n${notificacion.mensaje}\nRevisa los detalles en la pestana Paradas.`);
+      setTab('paradas');
+      cargar(normalizarFecha(notificacion?.metadata?.fecha));
+    });
     cargar(); 
     return () => { 
       clearInterval(simRef.current); 
@@ -51,17 +76,51 @@ export default function ConductorPanel() {
     }; 
   }, []);
 
-  const cargar = async () => {
+  const detectarRutaRecorrida = (paradasActuales, estadoAsignacion) => {
+    const totalParadas = paradasActuales.length;
+    const completadasDb = paradasActuales.filter(p => p.estado === 'completado' || Number(p.porcentaje_recorrido) >= 100).length;
+    const recorrida = totalParadas > 0 && completadasDb === totalParadas && estadoAsignacion !== 'completada';
+
+    if (recorrida) {
+      setProgreso(100);
+      setRutaRecorrida(true);
+    }
+
+    return recorrida;
+  };
+
+  const cargar = async (fechaObjetivo = null) => {
     try {
-      const hoy = new Date().toISOString().split('T')[0];
-      const ra = await API.get(`/conductor/mi-asignacion?fecha=${hoy}`);
-      const a = ra.data.asignacion;
+      setCargando(true);
+      const fechas = fechaObjetivo ? [fechaObjetivo] : [fechaColombia(0), fechaColombia(1), fechaColombia(2)];
+      let ra = null;
+      let a = null;
+
+      for (const fecha of fechas) {
+        ra = await API.get(`/conductor/mi-asignacion?fecha=${fecha}`);
+        a = ra.data.asignacion;
+        if (a) break;
+      }
+
+      if (!a) {
+        setAsignacion(null);
+        setParadas([]);
+        setReportesCiudadanos([]);
+        setRutaRecorrida(false);
+        setProgreso(0);
+        return;
+      }
+
       setAsignacion(a);
       setReportesCiudadanos(ra.data.reportesCiudadanos || []);
       if (a) {
+        setRutaRecorrida(Boolean(a.ruta_recorrida));
+        setProgreso(Number(a.progreso_recorrido) || 0);
+        if (a.km_recorridos) setKmFinales(a.km_recorridos);
         const rp = await API.get(`/conductor/mis-paradas/${a.id}`);
         const pp = rp.data.paradas;
         setParadas(pp);
+        detectarRutaRecorrida(pp, a.estado);
         const primerTrazado = pp.find(p => p.trazado_geom);
         if (primerTrazado) {
           try { setPosicion(JSON.parse(primerTrazado.trazado_geom)[0]); } catch {}
@@ -83,12 +142,16 @@ export default function ConductorPanel() {
 
     const handlePosicion = (data) => {
       setPosicion([data.lat, data.lng]);
-      if (data.progreso) setProgreso(data.progreso);
+      if (data.progreso !== undefined && data.progreso !== null) {
+        const nuevoProgreso = Number(data.progreso);
+        setProgreso(nuevoProgreso);
+      }
       if (data.km) setKmFinales(data.km);
     };
     
     const handleCompletada = (data) => {
       setProgreso(100);
+      setRutaRecorrida(true);
       if (data?.km_finales) setKmFinales(data.km_finales);
       setMostrarModalFin(true);
       cargar(); 
@@ -102,6 +165,19 @@ export default function ConductorPanel() {
       socketRef.current.off(`simulacion_completada_${asignacion.id}`, handleCompletada);
     };
   }, [asignacion]);
+
+  useEffect(() => {
+    if (cargando || !asignacion) return;
+
+    const reportesPendientes = reportesCiudadanos.filter(r => r.estado === 'en_proceso');
+    if (reportesPendientes.length === 0) return;
+
+    const avisoKey = `${asignacion.id}:${reportesPendientes.map(r => r.id).join(',')}`;
+    if (reportesAvisadosRef.current === avisoKey) return;
+    reportesAvisadosRef.current = avisoKey;
+
+    alert(`ATENCION CONDUCTOR:\nTienes ${reportesPendientes.length} reporte(s) ciudadano(s) asignado(s) para tener en cuenta durante esta ruta.\nRevisa los detalles en la pestana Paradas.`);
+  }, [cargando, asignacion, reportesCiudadanos]);
 
   const iniciarRecorrido = async (justificacion = null) => {
     if (iniciado) return;
@@ -121,11 +197,6 @@ export default function ConductorPanel() {
         // timer minutos locales
         timerRef.current = setInterval(() => setTiempoMin(m => m + 1), 60000);
 
-        // Alerta al conductor si hay reportes asignados
-        const pendientesCount = reportesCiudadanos.filter(r => r.estado === 'en_proceso').length;
-        if (pendientesCount > 0) {
-          alert(`⚠️ ATENCIÓN CONDUCTOR:\nTienes ${pendientesCount} reporte(s) ciudadano(s) de basura asignado(s) para recolección hoy en esta ruta.\nPor favor, revísalos en tu mapa o en la lista de paradas.`);
-        }
       } catch (e) {
         console.error('❌ ERROR AL INICIAR RUTA:', e.response?.data || e.message);
       }
@@ -179,10 +250,15 @@ export default function ConductorPanel() {
   };
 
   // Stats calculados
-  const completadas = paradas.filter(p => p.estado === 'completado').length;
   const total = paradas.length;
-  const porcentaje = total ? Math.round((completadas / total) * 100) : 0;
-  const paradaActual = paradas.find(p => p.estado === 'en_curso');
+  const completadasPorAvance = paradas.filter(p => p.estado === 'completado' || Number(p.porcentaje_recorrido) >= 100).length;
+  const completadas = completadasPorAvance;
+  const porcentajeParadas = total ? Math.round((completadasPorAvance / total) * 100) : 0;
+  const porcentaje = Math.max(porcentajeParadas, Math.round(Number(progreso) || 0));
+  const fechaAsignacion = normalizarFecha(asignacion?.fecha);
+  const asignacionEsHoy = !fechaAsignacion || fechaAsignacion === fechaColombia(0);
+  const puedeCerrarRuta = asignacionEsHoy && iniciado && asignacion?.estado !== 'completada' && rutaRecorrida;
+  const reportesPendientesRuta = reportesCiudadanos.filter(r => r.estado === 'en_proceso').length;
 
   // Calcular distancia aproximada recorrida (Haversine sobre el trazado simulado)
   const calcularKmEstimados = () => {
@@ -213,14 +289,15 @@ export default function ConductorPanel() {
         @keyframes pulsar { 0%,100%{opacity:1} 50%{opacity:0.3} }
         .dot-pulsar { animation: pulsar 1.5s ease-in-out infinite; }
         .cp-wrapper {
-          height: 100vh; height: 100dvh; width: 100vw; background-color: #05070A; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; overflow: hidden;
+          min-height: 100vh; min-height: 100svh; height: 100dvh; width: 100%; background-color: #05070A; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; overflow: hidden;
         }
         .cp-container {
           width: 100%; max-width: 430px; height: 100%; max-height: 920px; background-color: #0a0a0a; display: flex; flex-direction: column; position: relative; overflow: hidden; border: 1px solid #1f2937; border-radius: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85), 0 0 50px rgba(34,197,94,0.08); fontFamily: Inter, sans-serif;
         }
         @media (max-width: 768px) {
-          .cp-wrapper { padding: 0; background-color: #0a0a0a; }
-          .cp-container { max-width: 100%; height: 100%; max-height: none; border: none; border-radius: 0; box-shadow: none; }
+          html, body, #root { margin: 0; padding: 0; width: 100%; min-height: 100%; overflow: hidden; }
+          .cp-wrapper { padding: 0; background-color: #0a0a0a; width: 100%; min-height: 100svh; height: 100dvh; overflow: hidden; align-items: stretch; justify-content: stretch; }
+          .cp-container { max-width: 100%; height: 100%; max-height: none; border: none; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; overflow: hidden; }
         }
       `}</style>
 
@@ -246,7 +323,7 @@ export default function ConductorPanel() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '14px', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{usuario?.nombre || 'Conductor'}</div>
             <div style={{ fontSize: '11px', color: s.muted }}>
-              {asignacion?.vehiculo_placa || 'Sin placa'} · {asignacion?.ruta_nombre || 'Sin ruta asignada'}
+              {asignacion?.vehiculo_placa || 'Sin placa'} · {asignacion?.ruta_nombre || 'Sin ruta asignada'}{fechaAsignacion && !asignacionEsHoy ? ` · ${fechaAsignacion}` : ''}
             </div>
           </div>
           <button onClick={() => { cerrarSesion(); navigate('/login'); }} style={{ background: 'none', border: 'none', color: s.muted, cursor: 'pointer', fontSize: '18px', padding: '4px' }} title="Cerrar sesión">
@@ -271,10 +348,10 @@ export default function ConductorPanel() {
         </div>
 
         {/* ALERTA DE REPORTES CIUDADANOS ASIGNADOS */}
-        {iniciado && reportesCiudadanos.filter(r => r.estado === 'en_proceso').length > 0 && (
-          <div style={{ padding: '10px 16px', background: 'rgba(239, 68, 68, 0.15)', borderBottom: `1px solid ${s.border}`, display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {asignacion && reportesPendientesRuta > 0 && (
+          <div onClick={() => setTab('paradas')} style={{ padding: '10px 16px', background: 'rgba(239, 68, 68, 0.15)', borderBottom: `1px solid ${s.border}`, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
             <span className="dot-pulsar" style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
-            <span style={{ fontSize: '11px', color: '#fca5a5', fontWeight: 600 }}>
+            <span style={{ fontSize: '11px', color: '#fca5a5', fontWeight: 600, flex: 1 }}>
               ⚠️ Tienes {reportesCiudadanos.filter(r => r.estado === 'en_proceso').length} reporte(s) ciudadano(s) pendiente(s) hoy.
             </span>
           </div>
@@ -328,6 +405,17 @@ export default function ConductorPanel() {
             {/* Botón iniciar flotante (solo si no inició y no ha expirado) */}
             {!iniciado && tab === 'ruta' && (
               (() => {
+                if (!asignacionEsHoy) {
+                  return (
+                    <div style={{ padding: '12px 16px', background: 'rgba(245, 158, 11, 0.1)', borderBottom: `1px solid ${s.border}`, textAlign: 'center' }}>
+                      <span style={{ color: s.amber, fontSize: '13px', fontWeight: 700 }}>
+                        <i className="bi bi-calendar-event" style={{ marginRight: '8px' }}></i>
+                        Ruta programada para {fechaAsignacion}
+                      </span>
+                    </div>
+                  );
+                }
+
                 const [hf, mf] = (asignacion?.hora_limite_fin || '23:59:59').split(':');
                 const fin = new Date();
                 fin.setHours(parseInt(hf), parseInt(mf), 0);
@@ -355,7 +443,7 @@ export default function ConductorPanel() {
             )}
 
             {/* Botón finalizar ruta (solo si llegó al 100%) */}
-            {iniciado && porcentaje === 100 && tab === 'ruta' && (
+            {puedeCerrarRuta && tab === 'ruta' && (
               <div style={{ padding: '12px 16px', background: '#0d0d0d', borderBottom: `1px solid ${s.border}` }}>
                 <button onClick={() => {
                   // Si el backend no envió km via socket, calcular localmente

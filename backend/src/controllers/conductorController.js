@@ -2,12 +2,22 @@ const pool = require('../config/database');
 const { startSimulation } = require('../services/simuladorService');
 const { crearNotificacion } = require('../services/notificacionService');
 
-const verificarPropietarioAsignacion = async (asignacionId, conductorId) => {
+const obtenerAsignacionConductor = async (asignacionId, conductorId) => {
   const resultado = await pool.query(
-    'SELECT id FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2',
+    'SELECT * FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2',
     [asignacionId, conductorId]
   );
-  return resultado.rows.length > 0;
+  return resultado.rows[0] || null;
+};
+
+const exigirAsignacionActiva = (asignacion) => {
+  if (!asignacion) {
+    return { status: 403, mensaje: 'No autorizado. Esta asignacion no le pertenece.' };
+  }
+  if (asignacion.estado !== 'activa') {
+    return { status: 400, mensaje: 'La ruta debe estar activa para realizar esta accion.' };
+  }
+  return null;
 };
 
 
@@ -140,11 +150,18 @@ const actualizarSector = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
-      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    const asignacion = await obtenerAsignacionConductor(id, conductorId);
+    const errorAsignacion = exigirAsignacionActiva(asignacion);
+    if (errorAsignacion) {
+      return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
     }
 
-    const completado = porcentaje_recorrido >= 90;
+    const porcentaje = Number(porcentaje_recorrido);
+    if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) {
+      return res.status(400).json({ mensaje: 'El porcentaje recorrido debe estar entre 0 y 100.' });
+    }
+
+    const completado = porcentaje >= 90;
 
     await pool.query(
       `UPDATE sectores_asignacion 
@@ -153,7 +170,7 @@ const actualizarSector = async (req, res) => {
            completado_at = $3
        WHERE asignacion_id = $4 AND sector_id = $5`,
       [
-        porcentaje_recorrido,
+        porcentaje,
         completado ? 'completado' : 'en_progreso',
         completado ? new Date() : null,
         id, sectorId
@@ -188,8 +205,10 @@ const registrarDescarga = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
-      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    const asignacion = await obtenerAsignacionConductor(id, conductorId);
+    const errorAsignacion = exigirAsignacionActiva(asignacion);
+    if (errorAsignacion) {
+      return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
     }
 
     const resultado = await pool.query(
@@ -212,8 +231,10 @@ const completarDescarga = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
-      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    const asignacion = await obtenerAsignacionConductor(id, conductorId);
+    const errorAsignacion = exigirAsignacionActiva(asignacion);
+    if (errorAsignacion) {
+      return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
     }
 
     await pool.query(
@@ -235,13 +256,21 @@ const registrarGPS = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
-      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    const asignacion = await obtenerAsignacionConductor(id, conductorId);
+    const errorAsignacion = exigirAsignacionActiva(asignacion);
+    if (errorAsignacion) {
+      return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
+    }
+
+    const lat = Number(latitud);
+    const lng = Number(longitud);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return res.status(400).json({ mensaje: 'Coordenadas GPS invalidas.' });
     }
 
     await pool.query(
       'INSERT INTO rastreo_gps (asignacion_id, latitud, longitud) VALUES ($1, $2, $3)',
-      [id, latitud, longitud]
+      [id, lat, lng]
     );
 
     res.status(201).json({ mensaje: 'GPS registrado.' });
@@ -258,8 +287,10 @@ const reportarIncidencia = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
-      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    const asignacion = await obtenerAsignacionConductor(id, conductorId);
+    const errorAsignacion = exigirAsignacionActiva(asignacion);
+    if (errorAsignacion) {
+      return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
     }
 
     const tiposPermitidos = ['trancon', 'accidente', 'contenedor_lleno', 'via_bloqueada'];
@@ -287,11 +318,8 @@ const finalizarRuta = async (req, res) => {
   const conductorId = req.usuario.id;
 
   try {
-    if (!(await verificarPropietarioAsignacion(id, conductorId))) {
-      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
-    }
-
-    if (toneladas === undefined || toneladas === null || toneladas < 0) {
+    const toneladasNumero = Number(toneladas);
+    if (!Number.isFinite(toneladasNumero) || toneladasNumero < 0) {
       return res.status(400).json({ mensaje: 'Las toneladas recolectadas son obligatorias y deben ser válidas.' });
     }
 
@@ -306,6 +334,16 @@ const finalizarRuta = async (req, res) => {
       return res.status(400).json({ mensaje: 'Aún hay sectores pendientes por completar.' });
     }
 
+    const reportesPendientes = await pool.query(
+      `SELECT COUNT(*) FROM reportes_ciudadanos
+       WHERE asignacion_id = $1 AND estado = 'en_proceso'`,
+      [id]
+    );
+
+    if (parseInt(reportesPendientes.rows[0].count) > 0) {
+      return res.status(400).json({ mensaje: 'Aun hay reportes ciudadanos asignados sin resolver.' });
+    }
+
     // Iniciar transacción para evitar Race Conditions
     const client = await pool.connect();
     try {
@@ -313,14 +351,26 @@ const finalizarRuta = async (req, res) => {
 
       // Verificar que no haya sido completada por el simulador simultáneamente
       const checkEstado = await client.query(
-        'SELECT estado FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2 FOR UPDATE',
+        'SELECT estado, hora_inicio_real FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2 FOR UPDATE',
         [id, conductorId]
       );
 
-      if (checkEstado.rows.length === 0 || checkEstado.rows[0].estado === 'completada') {
+      if (checkEstado.rows.length === 0) {
         await client.query('ROLLBACK');
         client.release();
-        return res.status(400).json({ mensaje: 'La ruta ya se encuentra completada o no es válida.' });
+        return res.status(403).json({ mensaje: 'No autorizado. Esta asignacion no le pertenece.' });
+      }
+
+      if (checkEstado.rows[0].estado !== 'activa') {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ mensaje: 'Solo se puede finalizar una ruta activa.' });
+      }
+
+      if (!checkEstado.rows[0].hora_inicio_real) {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(400).json({ mensaje: 'La ruta no tiene hora de inicio registrada.' });
       }
 
       // Finalizar asignación
@@ -359,8 +409,16 @@ const finalizarRuta = async (req, res) => {
       await client.query(
         `INSERT INTO eficiencia_rutas 
          (asignacion_id, toneladas, tiempo_minutos, sectores_completados, sectores_totales, porcentaje_cumplimiento, num_descargas, km_recorridos)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [id, toneladas, tiempoMinutos, completados, total, porcentaje, parseInt(numDescargas.rows[0].count), a.km_recorridos]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (asignacion_id) DO UPDATE SET
+           toneladas = EXCLUDED.toneladas,
+           tiempo_minutos = EXCLUDED.tiempo_minutos,
+           sectores_completados = EXCLUDED.sectores_completados,
+           sectores_totales = EXCLUDED.sectores_totales,
+           porcentaje_cumplimiento = EXCLUDED.porcentaje_cumplimiento,
+           num_descargas = EXCLUDED.num_descargas,
+           km_recorridos = EXCLUDED.km_recorridos`,
+        [id, toneladasNumero, tiempoMinutos, completados, total, porcentaje, parseInt(numDescargas.rows[0].count), a.km_recorridos]
       );
 
       await client.query('COMMIT');
