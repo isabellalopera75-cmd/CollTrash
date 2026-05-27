@@ -390,7 +390,7 @@ const finalizarRuta = async (req, res) => {
         [id]
       );
       const a = asignacion.rows[0];
-      const tiempoMinutos = Math.round((new Date(a.hora_fin_real) - new Date(a.hora_inicio_real)) / 60000);
+
 
       const sectoresTotal = await client.query(
         'SELECT COUNT(*) FROM sectores_asignacion WHERE asignacion_id = $1',
@@ -400,29 +400,13 @@ const finalizarRuta = async (req, res) => {
         `SELECT COUNT(*) FROM sectores_asignacion WHERE asignacion_id = $1 AND estado = 'completado'`,
         [id]
       );
-      const numDescargas = await client.query(
-        'SELECT COUNT(*) FROM descargas WHERE asignacion_id = $1',
-        [id]
-      );
+
 
       const total = parseInt(sectoresTotal.rows[0].count);
       const completados = parseInt(sectoresCompletados.rows[0].count);
       const porcentaje = total > 0 ? Math.round((completados / total) * 100) : 0;
 
-      await client.query(
-        `INSERT INTO eficiencia_rutas 
-         (asignacion_id, toneladas, tiempo_minutos, sectores_completados, sectores_totales, porcentaje_cumplimiento, num_descargas, km_recorridos)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (asignacion_id) DO UPDATE SET
-           toneladas = EXCLUDED.toneladas,
-           tiempo_minutos = EXCLUDED.tiempo_minutos,
-           sectores_completados = EXCLUDED.sectores_completados,
-           sectores_totales = EXCLUDED.sectores_totales,
-           porcentaje_cumplimiento = EXCLUDED.porcentaje_cumplimiento,
-           num_descargas = EXCLUDED.num_descargas,
-           km_recorridos = EXCLUDED.km_recorridos`,
-        [id, toneladasNumero, tiempoMinutos, completados, total, porcentaje, parseInt(numDescargas.rows[0].count), a.km_recorridos]
-      );
+
 
       await client.query('COMMIT');
       client.release();

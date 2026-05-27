@@ -23,7 +23,7 @@ const dashboardDiario = async (req, res) => {
       `SELECT 
         COALESCE(SUM(e.km_recorridos), 0) AS km_totales,
         COALESCE(SUM(e.toneladas), 0) AS toneladas_totales
-       FROM eficiencia_rutas e
+       FROM mv_eficiencia_rutas e
        JOIN asignaciones_semanales a ON a.id = e.asignacion_id
        WHERE a.fecha = $1`,
       [hoy]
@@ -84,7 +84,7 @@ const dashboardMensual = async (req, res) => {
       `SELECT DATE_TRUNC('week', a.fecha) AS semana,
         COALESCE(SUM(e.toneladas), 0) AS toneladas
        FROM asignaciones_semanales a
-       LEFT JOIN eficiencia_rutas e ON e.asignacion_id = a.id
+       LEFT JOIN mv_eficiencia_rutas e ON e.asignacion_id = a.id
        WHERE a.fecha BETWEEN $1 AND $2
        GROUP BY DATE_TRUNC('week', a.fecha)
        ORDER BY semana ASC`,
@@ -94,7 +94,7 @@ const dashboardMensual = async (req, res) => {
     const porConductor = await pool.query(
       `SELECT u.nombre,
         ROUND(AVG(e.porcentaje_cumplimiento), 2) AS porcentaje_promedio
-       FROM eficiencia_rutas e
+       FROM mv_eficiencia_rutas e
        JOIN asignaciones_semanales a ON a.id = e.asignacion_id
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
        JOIN usuarios u ON u.id = rf.conductor_default_id
@@ -126,7 +126,7 @@ const reporteEficiencia = async (req, res) => {
         e.tiempo_minutos,
         e.porcentaje_cumplimiento,
         e.num_descargas
-      FROM eficiencia_rutas e
+      FROM mv_eficiencia_rutas e
       JOIN asignaciones_semanales a ON a.id = e.asignacion_id
       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
       JOIN usuarios u ON u.id = rf.conductor_default_id

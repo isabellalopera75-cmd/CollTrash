@@ -20,7 +20,7 @@ const eliminarAsignacionesPorIds = async (ids) => {
     await client.query("DELETE FROM descargas WHERE asignacion_id = ANY($1::int[])", [ids]);
     await client.query("DELETE FROM incidencias_conductor WHERE asignacion_id = ANY($1::int[])", [ids]);
     await client.query("DELETE FROM novedades_operativas WHERE asignacion_id = ANY($1::int[])", [ids]);
-    await client.query("DELETE FROM eficiencia_rutas WHERE asignacion_id = ANY($1::int[])", [ids]);
+
     
     // 3. Eliminar las asignaciones
     await client.query("DELETE FROM asignaciones_semanales WHERE id = ANY($1::int[])", [ids]);
