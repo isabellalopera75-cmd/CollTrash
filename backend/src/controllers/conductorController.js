@@ -411,6 +411,13 @@ const finalizarRuta = async (req, res) => {
       await client.query('COMMIT');
       client.release();
 
+      // Refrescar vista materializada de eficiencia con los nuevos datos
+      try {
+        await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_eficiencia_rutas');
+      } catch (refreshErr) {
+        console.error('No se pudo refrescar mv_eficiencia_rutas:', refreshErr.message);
+      }
+
       // NOTIFICAR ADMIN: Fin de ruta
       await crearNotificacion({
         titulo: '✅ Ruta Finalizada',
