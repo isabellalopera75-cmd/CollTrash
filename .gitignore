@@ -24,6 +24,7 @@ yarn-error.log*
 
 # Database and Backups
 *.sql
+!backend/src/migrations/*.sql
 *.txt
 backend/scratch/
 
