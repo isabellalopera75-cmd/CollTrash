@@ -57,10 +57,10 @@ const crearRutaFija = async (req, res) => {
     }
 
     // NUEVA VALIDACIÓN: REGLA DE ORO (No repetir jornada/día para Conductor o Vehículo)
-    const diasNuevos = dias_semana.split(',');
+    const diasNuevos = dias_semana.split(',').map(Number);
 
     const rutasExistentes = await pool.query(
-      `SELECT nombre, dias_semana, conductor_default_id, vehiculo_id
+      `SELECT nombre, dias_semana_arr, conductor_default_id, vehiculo_id
        FROM rutas_fijas 
        WHERE (conductor_default_id = $1 OR vehiculo_id = $2)
        AND jornada_id = $3
@@ -68,12 +68,10 @@ const crearRutaFija = async (req, res) => {
       [conductor_default_id, vehiculo_id, jornada_id]
     );
 
-    const normalizeStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-
     for (const ruta of rutasExistentes.rows) {
-      const diasOcupados = ruta.dias_semana.split(',');
+      const diasOcupados = ruta.dias_semana_arr || [];
       const coincidencia = diasNuevos.filter(diaN => 
-        diasOcupados.some(diaO => normalizeStr(diaN) === normalizeStr(diaO))
+        diasOcupados.some(diaO => diaN === diaO)
       );
 
       if (coincidencia.length > 0) {
@@ -230,25 +228,25 @@ const editarRutaFija = async (req, res) => {
       const c_id = conductor_default_id || r.conductor_default_id;
       const v_id = vehiculo_id || r.vehiculo_id;
       const j_id = jornada_id || r.jornada_id;
-      const d_sem = dias_semana || r.dias_semana;
+      const { arrayToString } = require('../utils/dateHelper');
+      const d_sem = dias_semana || arrayToString(r.dias_semana_arr || []);
       
       const rExistentes = await pool.query(
-        `SELECT nombre, dias_semana FROM rutas_fijas 
+        `SELECT nombre, dias_semana_arr FROM rutas_fijas 
          WHERE (conductor_default_id = $1 OR vehiculo_id = $2)
          AND jornada_id = $3 AND activo = TRUE AND id != $4`,
         [c_id, v_id, j_id, id]
       );
 
-      const normalizeStr = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-      const diasNuevos = d_sem.split(',');
+      const diasNuevos = typeof d_sem === 'string' ? d_sem.split(',').map(Number) : d_sem;
 
       for (const rx of rExistentes.rows) {
-        const diasOcupados = rx.dias_semana.split(',');
+        const diasOcupados = rx.dias_semana_arr || [];
         for (const diaN of diasNuevos) {
           for (const diaO of diasOcupados) {
-            if (normalizeStr(diaN) === normalizeStr(diaO)) {
+            if (diaN === diaO) {
               return res.status(400).json({ 
-                mensaje: `❌ Conflicto: El conductor o vehículo ya tienen la ruta "${rx.nombre}" el día ${diaN.trim()} en esta misma jornada.` 
+                mensaje: `❌ Conflicto: El conductor o vehículo ya tienen la ruta "${rx.nombre}" el día ${diaN} en esta misma jornada.` 
               });
             }
           }

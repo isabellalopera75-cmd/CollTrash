@@ -44,8 +44,8 @@ describe('Database Triggers Integration', () => {
     await pool.query(`
       INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom)
       VALUES 
-        ($1, 'Sector Test 1', 1, '{"type": "LineString", "coordinates": []}'),
-        ($1, 'Sector Test 2', 2, '{"type": "LineString", "coordinates": []}')
+        ($1, 'Sector Test 1', 1, '[[1, 2], [3, 4]]'),
+        ($1, 'Sector Test 2', 2, '[[1, 2], [3, 4]]')
     `, [testRutaId]);
   });
 
