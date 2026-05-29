@@ -89,7 +89,9 @@ export default function ConfigurarRutas() {
         jornada_id: rutaFull.jornada_id,
         conductor_default_id: rutaFull.conductor_default_id,
         vehiculo_id: rutaFull.vehiculo_id,
-        dias_semana: rutaFull.dias_semana ? rutaFull.dias_semana.split(', ').map(Number) : []
+        dias_semana: rutaFull.dias_semana 
+          ? String(rutaFull.dias_semana).split(',').map(d => parseInt(d.trim(), 10)).filter(n => !isNaN(n))
+          : []
       });
       
       if (sectores && sectores.length > 0) {
@@ -269,7 +271,7 @@ export default function ConfigurarRutas() {
             <div style={{ display: 'flex', gap: '6px', margin: '15px 0' }}>
                {['L', 'M', 'X', 'J', 'V', 'S'].map((letra, i) => {
                  const diasArr = ruta.dias_semana
-                   ? ruta.dias_semana.split(',').map(Number)
+                   ? String(ruta.dias_semana).split(',').map(d => parseInt(d.trim(), 10)).filter(n => !isNaN(n))
                    : [];
                  const estaActivo = diasArr.includes(i + 1);
                  return (

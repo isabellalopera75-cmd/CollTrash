@@ -3,11 +3,11 @@ const { arrayToString, isoDayNumber } = require('../src/utils/dateHelper');
 describe('dateHelper utilities', () => {
   describe('arrayToString', () => {
     it('should convert an array of numbers to a comma-separated string', () => {
-      expect(arrayToString([1, 2, 3])).toBe('1, 2, 3');
+      expect(arrayToString([1, 2, 3])).toBe('1,2,3');
     });
 
     it('should convert an array of strings to a comma-separated string', () => {
-      expect(arrayToString(['1', ' 2', '3 '])).toBe('1, 2, 3');
+      expect(arrayToString(['1', ' 2', '3 '])).toBe('1,2,3');
     });
 
     it('should return empty string if input is not an array', () => {
@@ -17,7 +17,7 @@ describe('dateHelper utilities', () => {
     });
 
     it('should filter out falsy values', () => {
-      expect(arrayToString([1, null, undefined, 2, ''])).toBe('1, 2');
+      expect(arrayToString([1, null, undefined, 2, ''])).toBe('1,2');
     });
   });
 

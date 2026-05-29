@@ -13,7 +13,7 @@ function arrayToString(arr) {
     .filter(v => v !== null && v !== undefined && v !== '')
     .map(v => String(v).trim())
     .filter(Boolean)
-    .join(', ');
+    .join(',');
 }
 
 /**
