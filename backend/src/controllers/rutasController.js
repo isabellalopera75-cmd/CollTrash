@@ -192,8 +192,14 @@ const obtenerRutaFijaPorId = async (req, res) => {
       [id]
     );
 
+    const { arrayToString } = require('../utils/dateHelper');
+    const rutaEncontrada = {
+      ...ruta.rows[0],
+      dias_semana: arrayToString(ruta.rows[0].dias_semana_arr || [])
+    };
+
     res.status(200).json({
-      ruta: ruta.rows[0],
+      ruta: rutaEncontrada,
       sectores: sectores.rows
     });
 

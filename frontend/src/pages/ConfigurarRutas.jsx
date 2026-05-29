@@ -356,12 +356,19 @@ export default function ConfigurarRutas() {
                   <div>
                     <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>Días de Recolección</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {['lunes','martes','miércoles','jueves','viernes','sábado'].map(d => (
-                        <button key={d} onClick={() => {
+                      {[
+                        { num: 1, label: 'lun' },
+                        { num: 2, label: 'mar' },
+                        { num: 3, label: 'mié' },
+                        { num: 4, label: 'jue' },
+                        { num: 5, label: 'vie' },
+                        { num: 6, label: 'sáb' }
+                      ].map(d => (
+                        <button type="button" key={d.num} onClick={() => {
                           const cur = form.dias_semana;
-                          setForm({...form, dias_semana: cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d]});
-                        }} className={`day-pill ${form.dias_semana.includes(d) ? 'active' : ''}`} style={{ width: 'auto', padding: '5px 12px', fontSize: '11px' }}>
-                          {d.substring(0, 3)}
+                          setForm({...form, dias_semana: cur.includes(d.num) ? cur.filter(x => x !== d.num) : [...cur, d.num]});
+                        }} className={`day-pill ${form.dias_semana.includes(d.num) ? 'active' : ''}`} style={{ width: 'auto', padding: '5px 12px', fontSize: '11px' }}>
+                          {d.label}
                         </button>
                       ))}
                     </div>
