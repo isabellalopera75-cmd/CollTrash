@@ -245,36 +245,52 @@ const TIPOS = [
   { key: 'otro',             label: '📋 Otro (describir)' },
 ];
 
-export function TabNovedades({ asignacionId, conductorId }) {
+export function TabNovedades({ asignacionId, conductorId, onReportarNovedad, isOnline }) {
   const [tipo, setTipo] = useState('');
   const [desc, setDesc] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
+  const [fueOffline, setFueOffline] = useState(false);
 
   const enviar = async (e) => {
     e.preventDefault();
     setEnviando(true);
-    try {
-      await API.post('/incidencias', {
+    if (onReportarNovedad) {
+      const res = await onReportarNovedad({
         asignacion_id: asignacionId,
         conductor_id: conductorId,
         tipo,
         descripcion: desc,
       });
-    } catch (err) {
-      console.error('Error al enviar novedad:', err.response?.data?.mensaje || err.message);
+      setFueOffline(res?.offline);
+    } else {
+      try {
+        await API.post('/incidencias', {
+          asignacion_id: asignacionId,
+          conductor_id: conductorId,
+          tipo,
+          descripcion: desc,
+        });
+        setFueOffline(false);
+      } catch (err) {
+        console.error('Error al enviar novedad:', err.response?.data?.mensaje || err.message);
+      }
     }
     setEnviando(false);
     setEnviado(true);
-    setTimeout(() => { setEnviado(false); setTipo(''); setDesc(''); }, 2000);
+    setTimeout(() => { setEnviado(false); setTipo(''); setDesc(''); setFueOffline(false); }, 2000);
   };
 
   if (enviado) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(34,197,94,0.2)', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>✓</div>
-        <div style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}>Novedad enviada</div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center' }}>El administrador fue notificado de inmediato.</div>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: fueOffline ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)', border: `2px solid ${fueOffline ? '#F59E0B' : '#22c55e'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>
+          {fueOffline ? '📶' : '✓'}
+        </div>
+        <div style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}>{fueOffline ? 'Guardado sin conexión' : 'Novedad enviada'}</div>
+        <div style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center' }}>
+          {fueOffline ? 'Se enviará automáticamente cuando recuperes la conexión.' : 'El administrador fue notificado de inmediato.'}
+        </div>
       </div>
     );
   }

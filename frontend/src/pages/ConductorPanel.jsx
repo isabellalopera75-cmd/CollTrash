@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import API from '../services/api';
@@ -49,6 +49,35 @@ export default function ConductorPanel() {
   const [mostrarModalFin, setMostrarModalFin] = useState(false);
   const [toneladas, setToneladas] = useState('');
   const [kmFinales, setKmFinales] = useState(0);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  const sincronizarPendientes = useCallback(async () => {
+    const queueStr = localStorage.getItem('colltrash_offline_queue');
+    if (!queueStr) return;
+    const queue = JSON.parse(queueStr);
+    if (queue.length === 0) return;
+
+    let successCount = 0;
+    const remainingQueue = [];
+
+    for (const item of queue) {
+      try {
+        if (item.tipo === 'completar_parada') {
+          await API.put(`/conductor/asignacion/${item.asignacion_id}/sector/${item.sector_id}/progreso`, { porcentaje_recorrido: 100 });
+        } else if (item.tipo === 'novedad') {
+          await API.post('/incidencias', item.payload);
+        }
+        successCount++;
+      } catch (err) {
+        remainingQueue.push(item);
+      }
+    }
+
+    localStorage.setItem('colltrash_offline_queue', JSON.stringify(remainingQueue));
+    if (successCount > 0) {
+      console.log(`[Offline] Sincronizados ${successCount} eventos pendientes`);
+    }
+  }, []);
 
   useEffect(() => { 
     const prevBg = document.body.style.backgroundColor;
@@ -75,6 +104,22 @@ export default function ConductorPanel() {
       document.body.style.backgroundColor = prevBg;
     }; 
   }, []);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      sincronizarPendientes();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [sincronizarPendientes]);
 
   const detectarRutaRecorrida = (paradasActuales, estadoAsignacion) => {
     const totalParadas = paradasActuales.length;
@@ -126,7 +171,6 @@ export default function ConductorPanel() {
           try { setPosicion(JSON.parse(primerTrazado.trazado_geom)[0]); } catch {}
         }
       }
-      // si a === null, no se carga nada — se mostrará la pantalla de sin asignación
     } catch (e) {
       console.error('Error al cargar asignación:', e.message);
     }
@@ -192,9 +236,7 @@ export default function ConductorPanel() {
 
         setIniciado(true);
         setMostrarModalTardio(false);
-        // marcar primera parada como en_curso si no lo está
         setParadas(prev => prev.map((p, i) => i === 0 && p.estado === 'pendiente' ? { ...p, estado: 'en_curso' } : p));
-        // timer minutos locales
         timerRef.current = setInterval(() => setTiempoMin(m => m + 1), 60000);
 
       } catch (e) {
@@ -226,30 +268,51 @@ export default function ConductorPanel() {
     }
   };
 
+  const encolarAccionOffline = (item) => {
+    const queue = JSON.parse(localStorage.getItem('colltrash_offline_queue') || '[]');
+    queue.push(item);
+    localStorage.setItem('colltrash_offline_queue', JSON.stringify(queue));
+  };
+
+  const reportarNovedad = async (payload) => {
+    if (isOnline) {
+      try {
+        await API.post('/incidencias', payload);
+        return { offline: false };
+      } catch (e) {
+        encolarAccionOffline({ tipo: 'novedad', payload, timestamp: Date.now() });
+        return { offline: true };
+      }
+    } else {
+      encolarAccionOffline({ tipo: 'novedad', payload, timestamp: Date.now() });
+      return { offline: true };
+    }
+  };
+
   const completarParada = async (saId) => {
     if (completando) return;
     setCompletando(true);
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 600)); 
     try {
       const parada = paradas.find(p => p.id === saId);
       if (asignacion && parada) {
-        await API.put(`/conductor/asignacion/${asignacion.id}/sector/${parada.sector_id}/progreso`, { porcentaje_recorrido: 100 });
+        if (isOnline) {
+          try {
+            await API.put(`/conductor/asignacion/${asignacion.id}/sector/${parada.sector_id}/progreso`, { porcentaje_recorrido: 100 });
+          } catch (e) {
+            encolarAccionOffline({ tipo: 'completar_parada', asignacion_id: asignacion.id, sector_id: parada.sector_id, timestamp: Date.now() });
+          }
+        } else {
+          encolarAccionOffline({ tipo: 'completar_parada', asignacion_id: asignacion.id, sector_id: parada.sector_id, timestamp: Date.now() });
+        }
       }
     } catch (e) {
       console.error('Error al completar parada:', e);
     }
-    setParadas(prev => {
-      const idx = prev.findIndex(p => p.id === saId);
-      return prev.map((p, i) => {
-        if (p.id === saId) return { ...p, estado: 'completado', completado_at: new Date().toISOString() };
-        if (i === idx + 1) return { ...p, estado: 'en_curso' };
-        return p;
-      });
-    });
+    await cargar(normalizarFecha(fechaAsignacion));
     setCompletando(false);
   };
 
-  // Stats calculados
   const total = paradas.length;
   const completadasPorAvance = paradas.filter(p => p.estado === 'completado' || Number(p.porcentaje_recorrido) >= 100).length;
   const completadas = completadasPorAvance;
@@ -260,7 +323,6 @@ export default function ConductorPanel() {
   const puedeCerrarRuta = asignacionEsHoy && iniciado && asignacion?.estado !== 'completada' && rutaRecorrida;
   const reportesPendientesRuta = reportesCiudadanos.filter(r => r.estado === 'en_proceso').length;
 
-  // Calcular distancia aproximada recorrida (Haversine sobre el trazado simulado)
   const calcularKmEstimados = () => {
     const trazado = FAKE_TRAZADO;
     let totalKm = 0;
@@ -273,12 +335,11 @@ export default function ConductorPanel() {
       const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
       totalKm += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
-    // Escalar por paradas completadas y un factor de tortuosidad de calles
     const factor = total > 0 ? completadas / total : 1;
     return (totalKm * factor * 1.35).toFixed(1);
   };
 
-  const s = { // estilos reutilizables
+  const s = { 
     bg: '#0a0a0a', card: '#111111', border: '#1f2937',
     green: '#22c55e', amber: '#F59E0B', muted: '#6b7280',
   };
@@ -306,12 +367,12 @@ export default function ConductorPanel() {
 
         {/* STATUS BAR */}
         <div style={{ background: '#050505', padding: 'calc(6px + env(safe-area-inset-top, 0px)) 16px 6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: s.green }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#fff' }}>
             <span className="dot-pulsar" style={{ width: 7, height: 7, borderRadius: '50%', background: s.green, display: 'inline-block' }}></span>
             {iniciado ? 'En ruta' : 'Listo'}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: s.muted }}>
-            <i className="bi bi-wifi"></i> GPS activo
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: isOnline ? s.green : '#ef4444' }}>
+            <i className={`bi bi-${isOnline ? 'wifi' : 'wifi-off'}`}></i> {isOnline ? 'Conectado' : 'Sin conexión'}
           </div>
         </div>
 
@@ -459,7 +520,7 @@ export default function ConductorPanel() {
             {tab === 'paradas' && <TabParadas paradas={paradas} onCompletar={completarParada} completando={completando} reportesCiudadanos={reportesCiudadanos} onResolverReporte={resolverReporte} />}
             {tab === 'novedades' && (
               asignacion && iniciado
-                ? <TabNovedades asignacionId={asignacion.id} conductorId={usuario?.id} />
+                ? <TabNovedades asignacionId={asignacion.id} conductorId={usuario?.id} onReportarNovedad={reportarNovedad} isOnline={isOnline} />
                 : <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: '16px', textAlign: 'center' }}>
                     <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(107,114,128,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <i className="bi bi-lock-fill" style={{ fontSize: '24px', color: '#6b7280' }}></i>
