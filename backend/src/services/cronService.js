@@ -122,7 +122,8 @@ const generarAsignaciones = async (fechaInicio = null) => {
            FROM sectores_ruta sr
            JOIN (
              SELECT * FROM UNNEST($1::int[], $2::int[]) AS t(asig_id, rf_id)
-           ) val ON sr.ruta_fija_id = val.rf_id`,
+           ) val ON sr.ruta_fija_id = val.rf_id
+           ON CONFLICT (asignacion_id, sector_id) DO NOTHING`,
           [newIds, newRutaIds]
         );
         

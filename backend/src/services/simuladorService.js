@@ -66,62 +66,70 @@ const startSimulation = async (asignacionId) => {
     };
     
     const interval = setInterval(async () => {
-      const elapsed = Date.now() - startTime;
-      let progress = elapsed / msTotal;
-      if (progress >= 1) progress = 1;
-      
-      let idx = Math.floor(progress * (pts.length - 1));
-      if (idx < 0) idx = 0;
-      if (idx >= pts.length) idx = pts.length - 1;
-      
-      const currentPos = pts[idx];
-
-      // Acumular KM
-      totalDistancia += calcularDistancia(ultimaPos, currentPos);
-      ultimaPos = currentPos;
-
-      const io = getIo();
-      if (io) {
-        io.emit('ubicacion_vehiculo', {
-          id: asig.vehiculo_id,
-          cod: asig.placa || 'VEH',
-          conductor: asig.conductor_nombre,
-          lat: currentPos[0],
-          lng: currentPos[1],
-          ruta: asig.ruta_nombre,
-          progreso: Math.round(progress * 100),
-          sector: 'Operación',
-          estado: 'en_ruta',
-          last: '0s',
-          asignacion_id: asig.id,
-          km_recorridos: totalDistancia.toFixed(2) // Enviamos KM en tiempo real
-        });
+      try {
+        const elapsed = Date.now() - startTime;
+        let progress = elapsed / msTotal;
+        if (progress >= 1) progress = 1;
         
-        io.emit(`posicion_conductor_${asig.id}`, { 
-          lat: currentPos[0], 
-          lng: currentPos[1], 
-          progreso: Math.round(progress * 100),
-          km: totalDistancia.toFixed(2)
-        });
-      }
+        let idx = Math.floor(progress * (pts.length - 1));
+        if (idx < 0) idx = 0;
+        if (idx >= pts.length) idx = pts.length - 1;
+        
+        const currentPos = pts[idx];
 
-      if (progress >= 1) {
+        if (!currentPos || !ultimaPos) {
+           throw new Error(`Posición inválida en simulación. idx=${idx}, pts.length=${pts.length}`);
+        }
+
+        // Acumular KM
+        totalDistancia += calcularDistancia(ultimaPos, currentPos);
+        ultimaPos = currentPos;
+
+        const io = getIo();
+        if (io) {
+          io.emit('ubicacion_vehiculo', {
+            id: asig.vehiculo_id,
+            cod: asig.placa || 'VEH',
+            conductor: asig.conductor_nombre,
+            lat: currentPos[0],
+            lng: currentPos[1],
+            ruta: asig.ruta_nombre,
+            progreso: Math.round(progress * 100),
+            sector: 'Operación',
+            estado: 'en_ruta',
+            last: '0s',
+            asignacion_id: asig.id,
+            km_recorridos: totalDistancia.toFixed(2)
+          });
+          
+          io.emit(`posicion_conductor_${asig.id}`, { 
+            lat: currentPos[0], 
+            lng: currentPos[1], 
+            progreso: Math.round(progress * 100),
+            km: totalDistancia.toFixed(2)
+          });
+        }
+
+        if (progress >= 1) {
+          clearInterval(activeSimulations.get(asignacionId));
+          activeSimulations.delete(asignacionId);
+
+          await pool.query(
+            `UPDATE asignaciones_semanales SET km_recorridos = $1 WHERE id = $2`,
+            [totalDistancia.toFixed(2), asignacionId]
+          );
+
+          await pool.query(
+            `UPDATE sectores_asignacion SET estado = 'completado', completado_at = NOW(), porcentaje_recorrido = 100 
+             WHERE asignacion_id = $1`, [asignacionId]
+          );
+          
+          if (io) io.emit(`simulacion_completada_${asig.id}`, { km_finales: totalDistancia.toFixed(2) });
+        }
+      } catch (err) {
+        console.error('❌ Error en tick de simulación (asignación', asignacionId, '):', err);
         clearInterval(activeSimulations.get(asignacionId));
         activeSimulations.delete(asignacionId);
-
-        // Actualizar la asignación con los KM finales
-        await pool.query(
-          `UPDATE asignaciones_semanales SET km_recorridos = $1 WHERE id = $2`,
-          [totalDistancia.toFixed(2), asignacionId]
-        );
-
-        // Completar todos los sectores
-        await pool.query(
-          `UPDATE sectores_asignacion SET estado = 'completado', completado_at = NOW(), porcentaje_recorrido = 100 
-           WHERE asignacion_id = $1`, [asignacionId]
-        );
-        
-        if (io) io.emit(`simulacion_completada_${asig.id}`, { km_finales: totalDistancia.toFixed(2) });
       }
     }, 5000); 
 

@@ -46,7 +46,7 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
        JOIN vehiculos    v  ON v.id  = rf.vehiculo_id
        JOIN jornadas     j  ON j.id  = rf.jornada_id
-        WHERE rf.conductor_default_id = $1 AND a.fecha = $2
+        WHERE rf.conductor_default_id = $1 AND a.fecha = $2 AND a.estado IN ('pendiente', 'activa')
         ORDER BY 
           CASE 
             WHEN a.estado = 'activa' THEN 0

@@ -69,8 +69,9 @@ export default function Reportes() {
 
   return (
     <AdminLayout>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: 'calc(100vh - 120px)' }}>
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
+        {/* Lado Izquierdo: Lista de Reportes */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', minHeight: 0 }}>
           <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)' }}>
             <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'white' }}>
               <i className="bi bi-megaphone-fill" style={{ marginRight: '12px', color: 'var(--color-primary)' }}></i>
@@ -124,7 +125,8 @@ export default function Reportes() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Lado Derecho: Detalle — altura fija, sin scroll, estilo WhatsApp */}
+        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
           {reporteSeleccionado ? (() => {
             const horas = (new Date() - new Date(reporteSeleccionado.created_at)) / (1000 * 60 * 60);
             const expirado = reporteSeleccionado.estado === 'pendiente' && horas > 42;
@@ -132,7 +134,8 @@ export default function Reportes() {
 
             return (
               <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ height: '300px', background: '#000' }}>
+                {/* Mapa con altura fija */}
+                <div style={{ height: '250px', minHeight: '250px', background: '#000', flexShrink: 0 }}>
                   <MapContainer center={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]} zoom={16} style={{ height: '100%' }}>
                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
                     <Marker position={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]}>
@@ -140,16 +143,18 @@ export default function Reportes() {
                     </Marker>
                   </MapContainer>
                 </div>
-                <div style={{ padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+
+                {/* Contenido con scroll interno */}
+                <div style={{ padding: '20px', flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                  <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
                     {reporteSeleccionado.foto_url && (
                       <img 
                         src={getAssetUrl(reporteSeleccionado.foto_url)} 
                         alt="Evidencia" 
-                        style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #333' }}
+                        style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}
                       />
                     )}
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <h4 style={{ fontSize: '16px', color: 'white', marginBottom: '4px' }}>{reporteSeleccionado.tipo_problema}</h4>
                       <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{reporteSeleccionado.descripcion}</p>
                       <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '8px' }}>Reportado por: {reporteSeleccionado.nombre_ciudadano}</div>
@@ -157,25 +162,28 @@ export default function Reportes() {
                   </div>
 
                   {reporteSeleccionado.justificacion_rechazo && (
-                    <div style={{ padding: '12px', background: reporteSeleccionado.estado === 'rechazado' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0, 255, 157, 0.1)', border: reporteSeleccionado.estado === 'rechazado' ? '1px solid #EF4444' : '1px solid #00FF9D', borderRadius: '8px', marginBottom: '20px', fontSize: '13px' }}>
+                    <div style={{ padding: '12px', background: reporteSeleccionado.estado === 'rechazado' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0, 255, 157, 0.1)', border: reporteSeleccionado.estado === 'rechazado' ? '1px solid #EF4444' : '1px solid #00FF9D', borderRadius: '8px', fontSize: '13px' }}>
                       <strong style={{ color: reporteSeleccionado.estado === 'rechazado' ? '#EF4444' : '#00FF9D' }}>
                         {reporteSeleccionado.estado === 'rechazado' ? 'Motivo de rechazo: ' : 'Detalle de agenda: '}
                       </strong>
                       <span style={{ color: '#fff' }}>{reporteSeleccionado.justificacion_rechazo}</span>
                     </div>
                   )}
+                </div>
 
+                {/* Botones siempre fijos al fondo */}
+                <div style={{ padding: '15px 20px', borderTop: '1px solid var(--border-color)', flexShrink: 0 }}>
                   {expirado && !yaProcesado ? (
-                    <div style={{ marginTop: 'auto', padding: '14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #EF4444', borderRadius: '8px', textAlign: 'center', color: '#EF4444', fontSize: '13px', fontWeight: 600 }}>
+                    <div style={{ padding: '14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #EF4444', borderRadius: '8px', textAlign: 'center', color: '#EF4444', fontSize: '13px', fontWeight: 600 }}>
                       ⚠️ Este reporte ha expirado al superar el límite de 42 horas sin ser atendido.
                     </div>
                   ) : !yaProcesado ? (
-                    <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+                    <div style={{ display: 'flex', gap: '10px' }}>
                       <button onClick={() => { setAccion('aceptar'); setMostrarModal(true); }} className="btn btn-primary" style={{ flex: 1 }}>✅ Aceptar y Agendar</button>
                       <button onClick={() => { setAccion('rechazar'); setMostrarModal(true); }} className="btn" style={{ flex: 1, background: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', border: '1px solid #ff4444' }}>❌ Rechazar</button>
                     </div>
                   ) : (
-                    <div style={{ marginTop: 'auto', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
                       ✓ Este reporte ya fue gestionado.
                     </div>
                   )}
@@ -193,6 +201,7 @@ export default function Reportes() {
         </div>
       </div>
 
+      {/* Modal de Acción */}
       {mostrarModal && (() => {
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

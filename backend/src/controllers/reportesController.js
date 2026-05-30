@@ -233,7 +233,8 @@ const actualizarEstado = async (req, res) => {
                 `INSERT INTO sectores_asignacion (asignacion_id, sector_id, estado, porcentaje_recorrido)
                  SELECT $1, id, 'pendiente', 0
                  FROM sectores_ruta
-                 WHERE ruta_fija_id = $2`,
+                 WHERE ruta_fija_id = $2
+                 ON CONFLICT (asignacion_id, sector_id) DO NOTHING`,
                 [finalAsignacionId, rutaFijaId]
               );
             }

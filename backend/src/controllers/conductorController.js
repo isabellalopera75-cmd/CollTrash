@@ -201,7 +201,7 @@ const actualizarSector = async (req, res) => {
 // Registrar descarga
 const registrarDescarga = async (req, res) => {
   const { id } = req.params;
-  const { sector_pausa_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng } = req.body;
+  const { sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng } = req.body;
   const conductorId = req.usuario.id;
 
   try {
@@ -213,9 +213,9 @@ const registrarDescarga = async (req, res) => {
 
     const resultado = await pool.query(
       `INSERT INTO descargas 
-       (asignacion_id, sector_pausa_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng, hora_salida)
+       (asignacion_id, sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng, hora_salida)
        VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-      [id, sector_pausa_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng]
+      [id, sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng]
     );
 
     res.status(201).json({ mensaje: 'Descarga registrada.', descarga: resultado.rows[0] });
@@ -376,12 +376,12 @@ const finalizarRuta = async (req, res) => {
       // Finalizar asignación
       await client.query(
         `UPDATE asignaciones_semanales 
-         SET estado = 'completada', hora_fin_real = NOW()
+         SET estado = 'completada', hora_fin_real = NOW(), toneladas = $3
          WHERE id = $1
          AND ruta_fija_id IN (
            SELECT id FROM rutas_fijas WHERE conductor_default_id = $2
          )`,
-        [id, conductorId]
+        [id, conductorId, toneladasNumero]
       );
 
       // Calcular eficiencia
