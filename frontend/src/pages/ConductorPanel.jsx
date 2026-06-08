@@ -617,6 +617,8 @@ export default function ConductorPanel() {
             </button>
           </div>
         </div>
+      )}
+      
       {/* MODAL ALERTA PERSONALIZADA */}
       {alerta && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
