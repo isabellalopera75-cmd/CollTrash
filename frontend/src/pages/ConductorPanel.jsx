@@ -50,6 +50,7 @@ export default function ConductorPanel() {
   const [toneladas, setToneladas] = useState('');
   const [kmFinales, setKmFinales] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [alerta, setAlerta] = useState(null);
 
   const sincronizarPendientes = useCallback(async () => {
     const queueStr = localStorage.getItem('colltrash_offline_queue');
@@ -91,8 +92,14 @@ export default function ConductorPanel() {
     socketRef.current.on('notificacion_nueva', (notificacion) => {
       if (notificacion?.metadata?.tipo !== 'REPORTE_ASIGNADO') return;
 
-      alert(`ATENCION CONDUCTOR:\n${notificacion.mensaje}\nRevisa los detalles en la pestana Sectores.`);
-      setTab('paradas');
+      setAlerta({
+        titulo: 'ATENCIÓN CONDUCTOR',
+        mensaje: `${notificacion.mensaje}\n\nRevisa los detalles en la pestaña Sectores.`,
+        onAceptar: () => {
+          setTab('paradas');
+          setAlerta(null);
+        }
+      });
       cargar(normalizarFecha(notificacion?.metadata?.fecha));
     });
     cargar(); 
@@ -220,7 +227,11 @@ export default function ConductorPanel() {
     if (reportesAvisadosRef.current === avisoKey) return;
     reportesAvisadosRef.current = avisoKey;
 
-    alert(`ATENCION CONDUCTOR:\nTienes ${reportesPendientes.length} reporte(s) ciudadano(s) asignado(s) para tener en cuenta durante esta ruta.\nRevisa los detalles en la pestana Sectores.`);
+    setAlerta({
+      titulo: 'NUEVOS REPORTES',
+      mensaje: `Tienes ${reportesPendientes.length} reporte(s) ciudadano(s) asignado(s) para tener en cuenta durante esta ruta.\n\nRevisa los detalles en la pestaña Sectores.`,
+      onAceptar: () => setAlerta(null)
+    });
   }, [cargando, asignacion, reportesCiudadanos]);
 
   const iniciarRecorrido = async (justificacion = null) => {
@@ -603,6 +614,25 @@ export default function ConductorPanel() {
               style={{ width: '100%', padding: '16px', borderRadius: '10px', border: 'none', background: s.green, color: '#000', fontWeight: 800, cursor: 'pointer' }}
             >
               Finalizar y Reportar
+            </button>
+          </div>
+        </div>
+      {/* MODAL ALERTA PERSONALIZADA */}
+      {alerta && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ background: '#111', padding: '24px', borderRadius: '16px', width: '100%', maxWidth: '340px', border: '1px solid #333', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', textAlign: 'center' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', margin: '0 auto' }}>
+              <i className="bi bi-bell-fill" style={{ color: s.amber, fontSize: '24px' }}></i>
+            </div>
+            <h3 style={{ color: 'white', marginTop: 0, marginBottom: '12px', fontSize: '18px' }}>{alerta.titulo}</h3>
+            <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '24px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+              {alerta.mensaje}
+            </p>
+            <button 
+              onClick={alerta.onAceptar}
+              style={{ width: '100%', padding: '14px', background: s.green, border: 'none', color: '#000', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, fontSize: '15px' }}
+            >
+              Entendido
             </button>
           </div>
         </div>
