@@ -91,7 +91,7 @@ export default function ConductorPanel() {
     socketRef.current.on('notificacion_nueva', (notificacion) => {
       if (notificacion?.metadata?.tipo !== 'REPORTE_ASIGNADO') return;
 
-      alert(`ATENCION CONDUCTOR:\n${notificacion.mensaje}\nRevisa los detalles en la pestana Paradas.`);
+      alert(`ATENCION CONDUCTOR:\n${notificacion.mensaje}\nRevisa los detalles en la pestana Sectores.`);
       setTab('paradas');
       cargar(normalizarFecha(notificacion?.metadata?.fecha));
     });
@@ -220,7 +220,7 @@ export default function ConductorPanel() {
     if (reportesAvisadosRef.current === avisoKey) return;
     reportesAvisadosRef.current = avisoKey;
 
-    alert(`ATENCION CONDUCTOR:\nTienes ${reportesPendientes.length} reporte(s) ciudadano(s) asignado(s) para tener en cuenta durante esta ruta.\nRevisa los detalles en la pestana Paradas.`);
+    alert(`ATENCION CONDUCTOR:\nTienes ${reportesPendientes.length} reporte(s) ciudadano(s) asignado(s) para tener en cuenta durante esta ruta.\nRevisa los detalles en la pestana Sectores.`);
   }, [cargando, asignacion, reportesCiudadanos]);
 
   const iniciarRecorrido = async (justificacion = null) => {
@@ -395,7 +395,7 @@ export default function ConductorPanel() {
         {/* PROGRESS BANNER */}
         <div style={{ padding: '12px 16px', background: '#0d0d0d', borderBottom: `1px solid ${s.border}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>{completadas}/{total} paradas</span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>{completadas}/{total} sectores</span>
             <span style={{ fontSize: '12px', fontWeight: 700, color: s.green }}>{porcentaje}%</span>
           </div>
           <div style={{ height: 5, background: '#1f2937', borderRadius: 3 }}>
@@ -420,7 +420,7 @@ export default function ConductorPanel() {
 
         {/* TABS */}
         <div style={{ display: 'flex', background: s.card, borderBottom: `1px solid ${s.border}` }}>
-          {[['ruta','bi-map-fill','Ruta'],['paradas','bi-list-check','Paradas'],['novedades','bi-exclamation-triangle-fill','Novedades']].map(([key,icon,label]) => {
+          {[['ruta','bi-map-fill','Ruta'],['paradas','bi-list-check','Sectores'],['novedades','bi-exclamation-triangle-fill','Novedades']].map(([key,icon,label]) => {
             const bloqueado = key === 'novedades' && (!asignacion || !iniciado);
             return (
               <button

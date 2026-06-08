@@ -97,9 +97,9 @@ export function TabRuta({ paradas, posicion, asignacion, reportesCiudadanos = []
       {/* Card próxima parada */}
       {activa && (
         <div style={{ padding: '12px 16px', background: 'rgba(0,0,0,0.9)', borderTop: '1px solid #333' }}>
-          <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>PRÓXIMA PARADA</div>
+          <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>PRÓXIMO SECTOR</div>
           <div style={{ fontWeight: 700, color: 'white', fontSize: '14px' }}>{activa.nombre}</div>
-          <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>Parada {activa.orden} · {activa.porcentaje_requerido}% del sector</div>
+          <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>Sector {activa.orden} · {activa.porcentaje_requerido}% del trazado</div>
         </div>
       )}
     </div>
@@ -113,7 +113,7 @@ export function TabParadas({ paradas, onCompletar, completando, reportesCiudadan
       {/* SECCIÓN 1: PARADAS OFICIALES */}
       <div>
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#22c55e', letterSpacing: '1px', marginBottom: '10px' }}>
-          📍 PARADAS OFICIALES DE LA RUTA
+          📍 SECTORES OFICIALES DE LA RUTA
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {paradas.map(p => {
