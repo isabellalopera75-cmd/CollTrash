@@ -281,19 +281,26 @@ const editarRutaFija = async (req, res) => {
       return res.status(404).json({ mensaje: 'Ruta no encontrada.' });
     }
 
-    // Si vienen sectores, actualizamos el primero (suponiendo 1 sector por ruta por ahora)
+    // Si vienen sectores, actualizamos el primero de forma segura y limpiamos posibles duplicados
     if (sectores && sectores.length > 0) {
       const sector = sectores[0];
       const sectorUpdate = await pool.query(
         `UPDATE sectores_ruta SET trazado_geom = $1, nombre = $2 
-         WHERE ruta_fija_id = $3 RETURNING id`,
+         WHERE id = (SELECT id FROM sectores_ruta WHERE ruta_fija_id = $3 ORDER BY id ASC LIMIT 1) RETURNING id`,
         [sector.trazado_geom, sector.nombre, id]
       );
+      
       if (sectorUpdate.rows.length === 0) {
         await pool.query(
           `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_requerido)
            VALUES ($1, $2, $3, $4, $5)`,
           [id, sector.nombre, 1, sector.trazado_geom, sector.porcentaje_requerido !== undefined ? sector.porcentaje_requerido : 90]
+        );
+      } else {
+        // Borrar cualquier sector extra que haya quedado por duplicación previa
+        await pool.query(
+          `DELETE FROM sectores_ruta WHERE ruta_fija_id = $1 AND id != $2`,
+          [id, sectorUpdate.rows[0].id]
         );
       }
     }
