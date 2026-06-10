@@ -58,9 +58,11 @@ const reasignarAsignacion = async (req, res) => {
 
   try {
     const asigActual = await pool.query(
-      `SELECT asig.fecha, asig.estado, asig.ruta_fija_id, rf.jornada_id, rf.conductor_default_id, rf.vehiculo_id 
+      `SELECT asig.fecha, asig.estado, asig.ruta_fija_id, rf.jornada_id, rf.conductor_default_id, rf.vehiculo_id,
+              j.hora_limite_fin
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
+       JOIN jornadas j ON j.id = rf.jornada_id
        WHERE asig.id = $1`,
       [id]
     );
@@ -69,10 +71,34 @@ const reasignarAsignacion = async (req, res) => {
       return res.status(404).json({ mensaje: 'Asignación no encontrada' });
     }
 
-    const { fecha, jornada_id, estado, ruta_fija_id, conductor_default_id } = asigActual.rows[0];
+    const { fecha, jornada_id, estado, ruta_fija_id, conductor_default_id, hora_limite_fin } = asigActual.rows[0];
 
     if (estado !== 'pendiente') {
       return res.status(400).json({ mensaje: 'Solo se pueden reasignar rutas pendientes.' });
+    }
+
+    // REGLA: Bloquear reasignación si la jornada ya terminó
+    const hoy = new Date().toISOString().split('T')[0];
+    const fechaAsig = new Date(fecha).toISOString().split('T')[0];
+    if (fechaAsig === hoy && hora_limite_fin) {
+      const [hf, mf] = hora_limite_fin.split(':');
+      const ahora = new Date();
+      const fin = new Date();
+      fin.setHours(parseInt(hf), parseInt(mf), 0);
+      if (ahora > fin) {
+        return res.status(400).json({ mensaje: '❌ La jornada ya finalizó. No se puede reasignar esta ruta.' });
+      }
+    }
+
+    // REGLA: Evitar reasignaciones múltiples para la misma asignación/fecha
+    const yaReasignada = await pool.query(
+      `SELECT id FROM cambios_conductor 
+       WHERE ruta_fija_id = $1 AND fecha_inicio = $2`,
+      [ruta_fija_id, fecha]
+    );
+
+    if (yaReasignada.rows.length > 0) {
+      return res.status(400).json({ mensaje: '⚠️ Esta ruta ya fue reasignada para esta fecha. No se puede reasignar nuevamente.' });
     }
 
     // Verificar conflictos con otras asignaciones del mismo día/jornada
@@ -93,18 +119,11 @@ const reasignarAsignacion = async (req, res) => {
       });
     }
 
-    // Si es permanente, actualizar la ruta fija
-    if (es_permanente) {
-      await pool.query(
-        `UPDATE rutas_fijas SET conductor_default_id = $1, vehiculo_id = $2 WHERE id = $3`,
-        [conductor_id, vehiculo_id, ruta_fija_id]
-      );
-    }
-
     const motivoCambio = req.body.motivo || 'Reasignación diaria manual';
     const conductorOriginal = conductor_default_id || null;
+    const vehiculoOriginal = asigActual.rows[0].vehiculo_id || null;
 
-    // Registrar el cambio (temporal o permanente)
+    // Registrar el cambio (guardar conductor/vehículo original para auditoría y posible reversión)
     await pool.query(
       `INSERT INTO cambios_conductor 
        (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, es_permanente)
@@ -112,7 +131,12 @@ const reasignarAsignacion = async (req, res) => {
       [ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, fecha, !!es_permanente]
     );
 
-    // No se actualiza asignaciones_semanales (el conductor se determina vía rutas_fijas y cambios_conductor)
+    // SIEMPRE actualizar rutas_fijas para que el nuevo conductor vea la ruta en su dashboard
+    await pool.query(
+      `UPDATE rutas_fijas SET conductor_default_id = $1, vehiculo_id = $2 WHERE id = $3`,
+      [conductor_id, vehiculo_id, ruta_fija_id]
+    );
+
     res.json({ mensaje: 'Asignación reasignada con éxito', asignacionId: id, permanente: !!es_permanente });
   } catch (error) {
     console.error(error);

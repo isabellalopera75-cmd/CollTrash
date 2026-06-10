@@ -85,7 +85,6 @@ export default function Rutas() {
       await reasignarAsignacion(asigAReasignar.id, formReasignar);
       setModalReasignar(false);
       cargarAsignaciones(); // Recargar tabla
-      alert('Reasignación exitosa');
     } catch (error) {
       alert(error.response?.data?.mensaje || 'Error al reasignar');
     }
@@ -239,9 +238,29 @@ export default function Rutas() {
                      {a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'activa' ? 'En curso' : 'Completado')}
                    </span>
                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => abrirModalReasignar(a)} className="btn" style={{ padding: '6px', background: 'none', color: '#666' }} title="Reasignar">
-                        <i className="bi bi-arrow-left-right"></i>
-                      </button>
+                       {(() => {
+                         const puedeReasignar = a.estado === 'pendiente';
+                         let jornadaTerminada = false;
+                         if (a.fecha.split('T')[0] === stats.hoy && a.hora_limite_fin) {
+                           const [hf, mf] = a.hora_limite_fin.split(':');
+                           const ahora = new Date();
+                           const fin = new Date();
+                           fin.setHours(parseInt(hf), parseInt(mf), 0);
+                           jornadaTerminada = ahora > fin;
+                         }
+                         const deshabilitado = !puedeReasignar || jornadaTerminada;
+                         return (
+                           <button 
+                             onClick={() => !deshabilitado && abrirModalReasignar(a)} 
+                             className="btn" 
+                             style={{ padding: '6px', background: 'none', color: deshabilitado ? '#333' : '#666', cursor: deshabilitado ? 'not-allowed' : 'pointer', opacity: deshabilitado ? 0.4 : 1 }} 
+                             title={jornadaTerminada ? 'Jornada finalizada' : (!puedeReasignar ? 'Solo se puede reasignar rutas pendientes' : 'Reasignar')}
+                             disabled={deshabilitado}
+                           >
+                             <i className="bi bi-arrow-left-right"></i>
+                           </button>
+                         );
+                       })()}
                        {a.estado === 'pendiente' && a.fecha.split('T')[0] === stats.hoy && (
                          (() => {
                             const [h, m] = (a.j_hora_inicio || '00:00:00').split(':');
