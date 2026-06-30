@@ -252,7 +252,7 @@ export default function ConfigurarRutas() {
                   </div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '16px', color: 'white' }}>{ruta.nombre}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>#{ruta.id} • {ruta.jornada_nombre}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>#{ruta.id} • TURNO {ruta.jornada_nombre?.toUpperCase()}</div>
                   </div>
                </div>
                <div style={{ display: 'flex', gap: '10px' }}>

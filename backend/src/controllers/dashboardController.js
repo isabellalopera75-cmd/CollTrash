@@ -51,22 +51,25 @@ const dashboardDiario = async (req, res) => {
 
 const dashboardSemanal = async (req, res) => {
   try {
-    const hoy = new Date();
-    const lunes = new Date(hoy);
-    lunes.setDate(hoy.getDate() - hoy.getDay() + 1);
-    const sabado = new Date(lunes);
-    sabado.setDate(lunes.getDate() + 5);
+    // Misma lógica que dashboardDiario para obtener "hoy" en Colombia
+    const ahora = new Date();
+    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
+    const hoy = ahora.toISOString().split('T')[0];
 
     const resultado = await pool.query(
-      `SELECT a.fecha,
-        COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE a.estado = 'completada') AS completadas
-       FROM asignaciones_semanales a
-       WHERE a.fecha BETWEEN $1 AND $2
-       GROUP BY a.fecha ORDER BY a.fecha ASC`,
-      [lunes.toISOString().split('T')[0], sabado.toISOString().split('T')[0]]
+      `SELECT 
+         d::date AS fecha,
+         COALESCE(SUM(a.toneladas), 0) AS toneladas
+       FROM generate_series(
+         date_trunc('week', $1::date)::date,
+         date_trunc('week', $1::date)::date + 6,
+         '1 day'
+       ) AS d
+       LEFT JOIN asignaciones_semanales a ON a.fecha = d::date
+       GROUP BY d
+       ORDER BY d ASC`,
+      [hoy]
     );
-
     res.status(200).json({ semana: resultado.rows });
   } catch (error) {
     console.error('Error:', error.message);

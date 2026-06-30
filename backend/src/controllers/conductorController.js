@@ -1,10 +1,10 @@
 const pool = require('../config/database');
-const { startSimulation } = require('../services/simuladorService');
+const { startSimulation, stopSimulation } = require('../services/simuladorService');
 const { crearNotificacion } = require('../services/notificacionService');
 
 const obtenerAsignacionConductor = async (asignacionId, conductorId) => {
   const resultado = await pool.query(
-    'SELECT a.* FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2',
+    'SELECT a.*, rf.nombre as ruta_nombre FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND a.conductor_id = $2',
     [asignacionId, conductorId]
   );
   return resultado.rows[0] || null;
@@ -28,7 +28,7 @@ const iniciarRuta = async (req, res) => {
 
   try {
     const asignacion = await pool.query(
-      'SELECT a.* FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2',
+      'SELECT a.*, rf.nombre as ruta_nombre FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2',
       [id, conductorId]
     );
 
@@ -96,25 +96,37 @@ const iniciarRuta = async (req, res) => {
 
     const asigId = parseInt(id);
 
-    await pool.query(
-      `UPDATE asignaciones_semanales 
-       SET estado = 'activa', hora_inicio_real = NOW(), inicio_tardio = $1, justificacion_tardio = $2
-       WHERE id = $3`,
-      [inicioTardio, justificacion || null, asigId]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // Activar primer sector (si existe)
-    await pool.query(
-      `UPDATE sectores_asignacion SET estado = 'en_progreso'
-       WHERE asignacion_id = $1 AND sector_id = (
-         SELECT sa.sector_id 
-         FROM sectores_asignacion sa
-         JOIN sectores_ruta sr ON sr.id = sa.sector_id
-         WHERE sa.asignacion_id = $2
-         ORDER BY sr.orden ASC LIMIT 1
-       )`,
-      [asigId, asigId]
-    );
+      await client.query(
+        `UPDATE asignaciones_semanales 
+         SET estado = 'activa', hora_inicio_real = NOW(), inicio_tardio = $1, justificacion_tardio = $2
+         WHERE id = $3`,
+        [inicioTardio, justificacion || null, asigId]
+      );
+
+      // Activar primer sector (si existe)
+      await client.query(
+        `UPDATE sectores_asignacion SET estado = 'en_progreso'
+         WHERE asignacion_id = $1 AND sector_id = (
+           SELECT sa.sector_id 
+           FROM sectores_asignacion sa
+           JOIN sectores_ruta sr ON sr.id = sa.sector_id
+           WHERE sa.asignacion_id = $2
+           ORDER BY sr.orden ASC LIMIT 1
+         )`,
+        [asigId, asigId]
+      );
+
+      await client.query('COMMIT');
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      throw txError;
+    } finally {
+      client.release();
+    }
 
     // NOTIFICAR ADMIN: Inicio de ruta
     await crearNotificacion({
@@ -201,7 +213,7 @@ const actualizarSector = async (req, res) => {
 // Registrar descarga
 const registrarDescarga = async (req, res) => {
   const { id } = req.params;
-  const { sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng } = req.body;
+  const { sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_id } = req.body;
   const conductorId = req.usuario.id;
 
   try {
@@ -211,16 +223,49 @@ const registrarDescarga = async (req, res) => {
       return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
     }
 
-    const resultado = await pool.query(
+    // Validar botadero activo
+    const landfill = await pool.query(
+      'SELECT id FROM puntos_descarga WHERE id = $1 AND activo = true',
+      [punto_descarga_id]
+    );
+    if (landfill.rows.length === 0) {
+      return res.status(400).json({ mensaje: 'El botadero seleccionado no existe o no está activo.' });
+    }
+
+    const insertResult = await pool.query(
       `INSERT INTO descargas 
-       (asignacion_id, sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng, hora_salida)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-      [id, sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_lat, punto_descarga_lng]
+       (asignacion_id, sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_id, toneladas, hora_salida)
+       VALUES ($1, $2, $3, $4, $5, 0, NOW()) RETURNING id`,
+      [id, sector_asignacion_id, punto_pausa_lat, punto_pausa_lng, punto_descarga_id]
     );
 
-    res.status(201).json({ mensaje: 'Descarga registrada.', descarga: resultado.rows[0] });
+    const descargaId = insertResult.rows[0].id;
+
+    const resultado = await pool.query(
+      `SELECT d.*, pd.latitud_centro, pd.longitud_centro, pd.nombre as punto_descarga_nombre
+       FROM descargas d
+       JOIN puntos_descarga pd ON pd.id = d.punto_descarga_id
+       WHERE d.id = $1`,
+      [descargaId]
+    );
+
+    // NOTIFICACIÓN AUTOMÁTICA DE INICIO DE DESCARGA
+    await crearNotificacion({
+      usuario_id: null, // Global para todos los admins
+      titulo: '🚛 Pausa de Descarga',
+      mensaje: `El conductor ${req.usuario.nombre} se dirige a descargar en "${resultado.rows[0].punto_descarga_nombre}". Ruta pausada temporalmente.`,
+      tipo: 'operativo',
+      metadata: { 
+        asignacion_id: parseInt(id), 
+        descarga_id: resultado.rows[0].id,
+        punto_descarga_id: parseInt(punto_descarga_id),
+        tipo: 'INICIO_DESCARGA' 
+      }
+    });
+
+    res.status(201).json({ mensaje: 'Descarga registrada e inicio de pausa.', descarga: resultado.rows[0] });
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('Error al registrar descarga:', error.message);
     res.status(500).json({ mensaje: 'Error interno del servidor.' });
   }
 };
@@ -228,6 +273,7 @@ const registrarDescarga = async (req, res) => {
 // Completar descarga
 const completarDescarga = async (req, res) => {
   const { id, descargaId } = req.params;
+  const { toneladas } = req.body;
   const conductorId = req.usuario.id;
 
   try {
@@ -237,14 +283,99 @@ const completarDescarga = async (req, res) => {
       return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
     }
 
-    await pool.query(
-      'UPDATE descargas SET hora_regreso = NOW() WHERE id = $1 AND asignacion_id = $2',
+    const toneladasDescargadas = Number(toneladas);
+    if (!Number.isFinite(toneladasDescargadas) || toneladasDescargadas < 0) {
+      return res.status(400).json({ mensaje: 'Las toneladas deben ser un número válido mayor o igual a 0.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Completar la descarga actual registrando hora de regreso y toneladas
+      const updateDescarga = await client.query(
+        'UPDATE descargas SET hora_regreso = NOW(), toneladas = $1 WHERE id = $2 AND asignacion_id = $3 RETURNING *',
+        [toneladasDescargadas, descargaId, id]
+      );
+
+      if (updateDescarga.rows.length === 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.status(404).json({ mensaje: 'Registro de descarga no encontrado.' });
+      }
+
+      // REACTIVAR SECTOR SI ESTABA COMPLETADO
+      const sectorAsigId = updateDescarga.rows[0].sector_asignacion_id;
+      await client.query(
+        `UPDATE sectores_asignacion 
+         SET estado = 'en_progreso'
+         WHERE id = $1 AND estado = 'completado'`,
+        [sectorAsigId]
+      );
+
+      // 2. Sumar el total de descargas registradas en esta asignación y actualizar asignaciones_semanales
+      await client.query(
+        `UPDATE asignaciones_semanales 
+         SET toneladas = (
+           SELECT COALESCE(SUM(toneladas), 0) 
+           FROM descargas 
+           WHERE asignacion_id = $1 AND hora_regreso IS NOT NULL
+         )
+         WHERE id = $1`,
+        [id]
+      );
+
+      await client.query('COMMIT');
+      client.release();
+
+      // NOTIFICACIÓN AUTOMÁTICA DE RETORNO Y TONELADAS
+      await crearNotificacion({
+        usuario_id: null,
+        titulo: '✅ Descarga Completada',
+        mensaje: `El conductor ${req.usuario.nombre} completó la descarga de ${toneladasDescargadas} ton. Retomando la ruta.`,
+        tipo: 'operativo',
+        metadata: { 
+          asignacion_id: parseInt(id), 
+          descarga_id: parseInt(descargaId),
+          toneladas: toneladasDescargadas,
+          tipo: 'FIN_DESCARGA' 
+        }
+      });
+
+      res.status(200).json({ mensaje: 'Descarga completada. Sector reactivado.', descarga: updateDescarga.rows[0] });
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      client.release();
+      throw txError;
+    }
+  } catch (error) {
+    console.error('Error al completar descarga:', error.message);
+    res.status(500).json({ mensaje: 'Error interno del servidor.' });
+  }
+};
+
+const obtenerDescarga = async (req, res) => {
+  const { id, descargaId } = req.params;
+  const conductorId = req.usuario.id;
+  try {
+    const asignacion = await obtenerAsignacionConductor(id, conductorId);
+    const errorAsignacion = exigirAsignacionActiva(asignacion);
+    if (errorAsignacion) {
+      return res.status(errorAsignacion.status).json({ mensaje: errorAsignacion.mensaje });
+    }
+    const resultado = await pool.query(
+      `SELECT d.*, pd.latitud_centro, pd.longitud_centro, pd.nombre as punto_descarga_nombre
+       FROM descargas d
+       JOIN puntos_descarga pd ON pd.id = d.punto_descarga_id
+       WHERE d.id = $1 AND d.asignacion_id = $2`,
       [descargaId, id]
     );
-
-    res.status(200).json({ mensaje: 'Descarga completada. Sector reactivado.' });
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Descarga no encontrada.' });
+    }
+    res.status(200).json({ descarga: resultado.rows[0] });
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('Error al obtener descarga:', error.message);
     res.status(500).json({ mensaje: 'Error interno del servidor.' });
   }
 };
@@ -373,10 +504,15 @@ const finalizarRuta = async (req, res) => {
         return res.status(400).json({ mensaje: 'La ruta no tiene hora de inicio registrada.' });
       }
 
-      // Finalizar asignación
+      // Finalizar asignación (ACUMULA TONELADAS DE DESCARGAS Y SUMA EL MANUAL)
       await client.query(
         `UPDATE asignaciones_semanales 
-         SET estado = 'completada', hora_fin_real = NOW(), toneladas = $3
+         SET estado = 'completada', hora_fin_real = NOW(),
+             toneladas = (
+               SELECT COALESCE(SUM(toneladas), 0) 
+               FROM descargas 
+               WHERE asignacion_id = $1 AND hora_regreso IS NOT NULL
+             ) + $3
          WHERE id = $1
          AND ruta_fija_id IN (
            SELECT id FROM rutas_fijas WHERE conductor_default_id = $2
@@ -384,9 +520,9 @@ const finalizarRuta = async (req, res) => {
         [id, conductorId, toneladasNumero]
       );
 
-      // Calcular eficiencia
+      // Calcular eficiencia (INCLUYE VEHICULO_ID EN LA CONSULTA)
       const asignacion = await client.query(
-        'SELECT * FROM asignaciones_semanales WHERE id = $1',
+        'SELECT a.*, rf.nombre as ruta_nombre, rf.vehiculo_id FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1',
         [id]
       );
       const a = asignacion.rows[0];
@@ -410,6 +546,18 @@ const finalizarRuta = async (req, res) => {
 
       await client.query('COMMIT');
       client.release();
+
+      // DETENER SIMULACIÓN Y EMITIR WEBSOCKET AL ADMIN
+      stopSimulation(parseInt(id));
+
+      const { getIo } = require('../config/socket');
+      const io = getIo();
+      if (io) {
+        io.emit('ruta_finalizada', { 
+          asignacion_id: parseInt(id), 
+          vehiculo_id: a.vehiculo_id 
+        });
+      }
 
       // Refrescar vista materializada de eficiencia con los nuevos datos
       try {
@@ -440,6 +588,6 @@ const finalizarRuta = async (req, res) => {
 
 module.exports = {
   iniciarRuta, actualizarSector,
-  registrarDescarga, completarDescarga,
+  registrarDescarga, completarDescarga, obtenerDescarga,
   registrarGPS, reportarIncidencia, finalizarRuta
 };

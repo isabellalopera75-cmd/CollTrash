@@ -35,7 +35,7 @@ export default function Configuracion() {
   const [cargando, setCargando] = useState(true);
 
   // Configuración general
-  const [config, setConfig] = useState({ depot: null });
+  const [config, setConfig] = useState({ depot: null, telefono_grua: '', telefono_ambulancia: '' });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   useEffect(() => { cargarDatos(); }, []);
@@ -48,9 +48,11 @@ export default function Configuracion() {
       
       const resC = await obtenerConfig();
       const cfg = resC.data.config;
-      if (cfg.depot) {
-        setConfig({ depot: JSON.parse(cfg.depot) });
-      }
+      setConfig({ 
+        depot: cfg.depot ? JSON.parse(cfg.depot) : null,
+        telefono_grua: cfg.telefono_grua || '',
+        telefono_ambulancia: cfg.telefono_ambulancia || ''
+      });
     } catch (e) { console.error(e); }
     finally { setCargando(false); }
   };
@@ -64,6 +66,19 @@ export default function Configuracion() {
     } catch (e) {
       alert('Error al guardar configuración');
     } finally { setIsSavingConfig(false); }
+  };
+
+  const handleGuardarTelefonos = async () => {
+    setIsSavingConfig(true);
+    try {
+      await actualizarConfig({ clave: 'telefono_grua', valor: config.telefono_grua });
+      await actualizarConfig({ clave: 'telefono_ambulancia', valor: config.telefono_ambulancia });
+      alert('✅ Teléfonos de emergencia actualizados correctamente');
+    } catch (e) {
+      alert('❌ Error al guardar los teléfonos de emergencia');
+    } finally { 
+      setIsSavingConfig(false); 
+    }
   };
 
   const handleAbrirModal = (jornada = null) => {
@@ -138,6 +153,48 @@ export default function Configuracion() {
               <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleGuardarConfig} disabled={isSavingConfig}>
                 <i className="bi bi-save" style={{ marginRight: '8px' }}></i>
                 {isSavingConfig ? 'Guardando...' : 'Guardar Punto de Inicio'}
+              </button>
+            </div>
+
+            <div style={{ marginTop: '24px' }}>
+              <h3 style={{ fontSize: '18px', color: 'white', marginBottom: '8px' }}>Teléfonos de Emergencia</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Estos números se enviarán a los conductores en caso de reportar contingencias crudas.
+              </p>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px', display: 'block' }}>
+                  📞 Teléfono Grúa (Para Falla mecánica o Accidente)
+                </label>
+                <input 
+                  type="text" 
+                  value={config.telefono_grua} 
+                  onChange={e => setConfig({...config, telefono_grua: e.target.value})}
+                  className="card" 
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid #444', color: 'white', padding: '10px' }}
+                  placeholder="Ej: +57 300 000 0000"
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px', display: 'block' }}>
+                  🚑 Teléfono Ambulancia (Para Operario lesionado)
+                </label>
+                <input 
+                  type="text" 
+                  value={config.telefono_ambulancia} 
+                  onChange={e => setConfig({...config, telefono_ambulancia: e.target.value})}
+                  className="card" 
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid #444', color: 'white', padding: '10px' }}
+                  placeholder="Ej: 123 o +57 312 000 0000"
+                />
+              </div>
+
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '5px' }} onClick={handleGuardarTelefonos} disabled={isSavingConfig}>
+                <i className="bi bi-telephone-fill" style={{ marginRight: '8px' }}></i>
+                {isSavingConfig ? 'Guardando...' : 'Guardar Teléfonos'}
               </button>
             </div>
           </div>

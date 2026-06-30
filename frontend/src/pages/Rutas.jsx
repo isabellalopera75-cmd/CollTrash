@@ -129,7 +129,7 @@ export default function Rutas() {
            </button>
            <button className="btn btn-primary" onClick={handleGenerarSemana} disabled={isGenerating}>
              <i className="bi bi-magic" style={{ marginRight: '8px' }}></i>
-             {isGenerating ? 'Generando...' : 'Nueva asignación'}
+             {isGenerating ? 'Generando...' : 'Actualizar asignaciones'}
            </button>
         </div>
       </div>
@@ -137,7 +137,8 @@ export default function Rutas() {
       {/* Selector de Días Horizontal (Estilo Imagen 2) */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '30px', overflowX: 'auto', paddingBottom: '10px' }}>
         {diasVista.map((d, i) => {
-          const iso = d.toISOString().split('T')[0];
+          const tzOffset = d.getTimezoneOffset() * 60000;
+          const iso = new Date(d.getTime() - tzOffset).toISOString().split('T')[0];
           const activo = iso === fechaSeleccionada;
           return (
             <div 
@@ -200,11 +201,22 @@ export default function Rutas() {
             <i className="bi bi-calendar-x" style={{ fontSize: '40px', display: 'block', marginBottom: '15px' }}></i>
             No hay rutas asignadas para esta fecha.
             <br/>
-            Usa el botón "Nueva asignación" para crear la jornada.
+            Usa el botón "Actualizar asignaciones" para crear la jornada.
           </div>
         ) : (
           <div>
-            {asignaciones.map((a) => (
+            {asignaciones.map((a) => {
+              let jornadaTerminada = false;
+              if (a.fecha.split('T')[0] === stats.hoy && a.hora_limite_fin) {
+                const [hf, mf] = a.hora_limite_fin.split(':');
+                const ahora = new Date();
+                const fin = new Date();
+                fin.setHours(parseInt(hf), parseInt(mf), 0);
+                jornadaTerminada = ahora > fin;
+              }
+              const esExpirado = a.estado === 'pendiente' && jornadaTerminada;
+
+              return (
               <div key={a.id} className="data-table-row" style={{ gridTemplateColumns: '2fr 2fr 1.5fr', padding: '25px 20px' }}>
                 {/* Columna Ruta y Progreso */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -231,23 +243,15 @@ export default function Rutas() {
                 {/* Columna Estado y Acciones */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '15px' }}>
                    <span style={{ fontSize: '10px', padding: '4px 10px', borderRadius: '4px', background: 'rgba(255, 165, 0, 0.1)', color: 'orange', fontWeight: 700 }}>
-                     {a.jornada_nombre?.toUpperCase()}
+                     TURNO {a.jornada_nombre?.toUpperCase()}
                    </span>
-                   <span className={`status-badge ${getStatusClass(a.estado)}`} style={{ fontSize: '10px', padding: '5px 12px' }}>
-                     <i className={`bi ${getStatusIcon(a.estado)}`} style={{ marginRight: '6px' }}></i>
-                     {a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'activa' ? 'En curso' : 'Completado')}
+                   <span className={`status-badge ${esExpirado ? '' : getStatusClass(a.estado)}`} style={{ fontSize: '10px', padding: '5px 12px', ...(esExpirado ? { color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.1)' } : {}) }}>
+                     <i className={`bi ${esExpirado ? 'bi-x-circle-fill' : getStatusIcon(a.estado)}`} style={{ marginRight: '6px' }}></i>
+                     {esExpirado ? 'Expirado' : (a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'activa' ? 'En curso' : 'Completado'))}
                    </span>
                    <div style={{ display: 'flex', gap: '8px' }}>
                        {(() => {
                          const puedeReasignar = a.estado === 'pendiente';
-                         let jornadaTerminada = false;
-                         if (a.fecha.split('T')[0] === stats.hoy && a.hora_limite_fin) {
-                           const [hf, mf] = a.hora_limite_fin.split(':');
-                           const ahora = new Date();
-                           const fin = new Date();
-                           fin.setHours(parseInt(hf), parseInt(mf), 0);
-                           jornadaTerminada = ahora > fin;
-                         }
                          const deshabilitado = !puedeReasignar || jornadaTerminada;
                          return (
                            <button 
@@ -264,20 +268,15 @@ export default function Rutas() {
                        {a.estado === 'pendiente' && a.fecha.split('T')[0] === stats.hoy && (
                          (() => {
                             const [h, m] = (a.j_hora_inicio || '00:00:00').split(':');
-                            const [hf, mf] = (a.hora_limite_fin || '23:59:59').split(':');
                             
                             const ahora = new Date();
                             const inicio = new Date();
                             inicio.setHours(parseInt(h), parseInt(m), 0);
                             
-                            const fin = new Date();
-                            fin.setHours(parseInt(hf), parseInt(mf), 0);
-
                             const limiteReactivacion = new Date(inicio.getTime() + 60 * 60 * 1000);
                             
                             // Regla: Es tarde (pasó 1h) PERO aún no termina la jornada
                             const esTarde = ahora > limiteReactivacion;
-                            const jornadaTerminada = ahora > fin;
                             
                             if (esTarde && !jornadaTerminada && !a.habilitado_por_admin) {
                               return (
@@ -294,13 +293,11 @@ export default function Rutas() {
                             return null;
                          })()
                        )}
-                      <button className="btn" style={{ padding: '6px', background: 'none', color: '#666' }} title="Ver Detalle">
-                        <i className="bi bi-chevron-down"></i>
-                      </button>
+
                    </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>

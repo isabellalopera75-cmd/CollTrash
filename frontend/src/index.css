@@ -165,6 +165,8 @@ body {
   border-bottom: 1px solid var(--border-color);
   background-color: color-mix(in oklch, var(--bg-global), transparent 20%);
   backdrop-filter: blur(8px);
+  position: relative;
+  z-index: 1000;
 }
 
 .page-info h1 {

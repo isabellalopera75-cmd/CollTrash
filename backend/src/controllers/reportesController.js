@@ -1,6 +1,9 @@
 const pool = require('../config/database');
 const { crearNotificacion } = require('../services/notificacionService');
 const { getIo } = require('../config/socket');
+const fs = require('fs');
+const path = require('path');
+const heicConvert = require('heic-convert');
 require('dotenv').config();
 
 const notificarConductorReporteAsignado = async (asignacionId, reporte) => {
@@ -36,8 +39,30 @@ const crearReporte = async (req, res) => {
   const { latitud, longitud, descripcion, tipo_problema, nombre_ciudadano, barrio_id, descripcion_extra } = req.body;
   
   const ciudadanoId = req.usuario ? req.usuario.id : null;
-  // Construir URL de la foto si se subió un archivo
-  const foto_url = req.file ? `/uploads/reportes/${req.file.filename}` : null;
+  
+  let foto_url = req.file ? `/uploads/reportes/${req.file.filename}` : null;
+
+  if (req.file && req.file.filename.toLowerCase().endsWith('.heic')) {
+    try {
+      const inputBuffer = await fs.promises.readFile(req.file.path);
+      const outputBuffer = await heicConvert({
+        buffer: inputBuffer,
+        format: 'JPEG',
+        quality: 0.5
+      });
+      
+      const newFilename = req.file.filename.replace(/\.heic$/i, '.jpeg');
+      const newPath = path.join(req.file.destination, newFilename);
+      
+      await fs.promises.writeFile(newPath, outputBuffer);
+      await fs.promises.unlink(req.file.path);
+      
+      foto_url = `/uploads/reportes/${newFilename}`;
+    } catch (err) {
+      console.error('Error convirtiendo HEIC a JPEG:', err);
+    }
+  }
+
   // Combinar ubicación con descripción extra si existe
   const descripcionCompleta = descripcion_extra
     ? `${descripcion || ''}\n[Detalle: ${descripcion_extra}]`.trim()
@@ -193,7 +218,9 @@ const actualizarEstado = async (req, res) => {
 
   const targetId = asignacion_id || asignacion_semanal_id || ruta_id;
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     let resultado;
     let finalAsignacionId = null;
     let targetRutaNombre = '';
@@ -207,12 +234,12 @@ const actualizarEstado = async (req, res) => {
           targetFecha = parts[1];
 
           // Obtener datos de la ruta fija
-          const infoRuta = await pool.query('SELECT nombre, conductor_default_id, vehiculo_id FROM rutas_fijas WHERE id = $1', [rutaFijaId]);
+          const infoRuta = await client.query('SELECT nombre, conductor_default_id, vehiculo_id FROM rutas_fijas WHERE id = $1', [rutaFijaId]);
           if (infoRuta.rows.length > 0) {
             targetRutaNombre = infoRuta.rows[0].nombre;
             
             // Buscar si ya existe la asignación para esta ruta y fecha
-            let asignacionRes = await pool.query(
+            let asignacionRes = await client.query(
               'SELECT id FROM asignaciones_semanales WHERE ruta_fija_id = $1 AND fecha = $2',
               [rutaFijaId, targetFecha]
             );
@@ -221,7 +248,7 @@ const actualizarEstado = async (req, res) => {
               finalAsignacionId = asignacionRes.rows[0].id;
             } else {
               // Si no existe, la creamos dinámicamente para ese día
-              const insertRes = await pool.query(
+              const insertRes = await client.query(
                 `INSERT INTO asignaciones_semanales (ruta_fija_id, fecha, estado)
                  VALUES ($1, $2, 'pendiente') RETURNING id`,
                 [rutaFijaId, targetFecha]
@@ -229,7 +256,7 @@ const actualizarEstado = async (req, res) => {
               finalAsignacionId = insertRes.rows[0].id;
 
               // Vincular los sectores de la ruta a la nueva asignación
-              await pool.query(
+              await client.query(
                 `INSERT INTO sectores_asignacion (asignacion_id, sector_id, estado, porcentaje_recorrido)
                  SELECT $1, id, 'pendiente', 0
                  FROM sectores_ruta
@@ -242,7 +269,7 @@ const actualizarEstado = async (req, res) => {
         } else {
           finalAsignacionId = parseInt(targetId);
           // Obtener info básica de la asignación
-          const infoAsig = await pool.query(
+          const infoAsig = await client.query(
             `SELECT rf.nombre, a.fecha 
              FROM asignaciones_semanales a 
              JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id 
@@ -257,11 +284,12 @@ const actualizarEstado = async (req, res) => {
       }
 
       if (!finalAsignacionId) {
+        await client.query('ROLLBACK');
         return res.status(400).json({ mensaje: 'Debe seleccionar una asignacion para atender el reporte.' });
       }
 
       if (finalAsignacionId) {
-        const asignacionValida = await pool.query(
+        const asignacionValida = await client.query(
           `SELECT estado, fecha
            FROM asignaciones_semanales
            WHERE id = $1`,
@@ -269,44 +297,50 @@ const actualizarEstado = async (req, res) => {
         );
 
         if (asignacionValida.rows.length === 0) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ mensaje: 'La asignacion seleccionada no existe.' });
         }
 
         const destino = asignacionValida.rows[0];
         if (!['pendiente', 'activa'].includes(destino.estado)) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta cerrada.' });
         }
 
         if (new Date(destino.fecha) < new Date(new Date().toISOString().split('T')[0])) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta pasada.' });
         }
       }
 
       const msjAceptado = `Programado para recolección en la ruta: ${targetRutaNombre || 'asignada'} (${targetFecha || fecha_programada || 'Próximas 48h'})`;
       
-      resultado = await pool.query(
+      resultado = await client.query(
         `UPDATE reportes_ciudadanos 
          SET estado = $1, asignacion_id = $2, justificacion_rechazo = $4, atendido_at = NOW()
          WHERE id = $3 RETURNING *`,
         [estado, finalAsignacionId, id, msjAceptado]
       );
     } else if (estado === 'rechazado') {
-      resultado = await pool.query(
+      resultado = await client.query(
         `UPDATE reportes_ciudadanos 
          SET estado = 'rechazado', justificacion_rechazo = $1
          WHERE id = $2 RETURNING *`,
         [justificacion_rechazo || null, id]
       );
     } else {
-      resultado = await pool.query(
+      resultado = await client.query(
         `UPDATE reportes_ciudadanos SET estado = $1 WHERE id = $2 RETURNING *`,
         [estado, id]
       );
     }
 
     if (resultado.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
     }
+
+    await client.query('COMMIT');
 
     // Emitir por Socket.io en tiempo real
     const io = getIo();
@@ -321,8 +355,11 @@ const actualizarEstado = async (req, res) => {
 
     res.status(200).json({ mensaje: 'Estado de reporte actualizado.', reporte: resultado.rows[0] });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error al actualizar estado del reporte:', error.message);
     res.status(500).json({ mensaje: 'Error interno del servidor.' });
+  } finally {
+    client.release();
   }
 };
 

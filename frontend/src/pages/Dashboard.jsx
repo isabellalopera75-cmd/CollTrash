@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import AdminLayout from '../components/Layout/AdminLayout';
-import { dashboardDiario } from '../services/api';
+import { dashboardDiario, dashboardSemanal } from '../services/api';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -36,6 +37,7 @@ export default function Dashboard() {
     toneladasHoy: 0,
     kmHoy: 0
   });
+  const [semanaTons, setSemanaTons] = useState([0, 0, 0, 0, 0, 0, 0]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,11 +52,34 @@ export default function Dashboard() {
           toneladasHoy: parseFloat(d.eficiencia.toneladas_totales || 0).toFixed(1),
           kmHoy: parseFloat(d.eficiencia.km_totales || 0).toFixed(1)
         });
+
+        const resSemana = await dashboardSemanal();
+        if (resSemana.data && resSemana.data.semana) {
+          setSemanaTons(resSemana.data.semana.map(item => parseFloat(item.toneladas)));
+        }
       } catch (e) { 
         console.error('Error cargando stats:', e); 
       }
     };
+    
     fetchData();
+
+    const interval = setInterval(fetchData, 30000);
+
+    const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' 
+      ? 'http://localhost:3000' 
+      : window.location.origin;
+      
+    const socket = io(socketUrl, { auth: { token: localStorage.getItem('token') } });
+    
+    socket.on('ruta_finalizada', () => {
+      fetchData();
+    });
+
+    return () => {
+      clearInterval(interval);
+      if (socket) socket.disconnect();
+    };
   }, []);
 
   // Gráfica Doughnut (Estado de Rutas)
@@ -72,7 +97,7 @@ export default function Dashboard() {
     labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
     datasets: [{
       label: 'Toneladas',
-      data: [12, 19, 15, 17, 22, 14, 0],
+      data: semanaTons,
       backgroundColor: 'rgba(0, 255, 157, 0.6)',
       borderRadius: 8,
     }]

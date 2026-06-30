@@ -12,7 +12,11 @@ export const AuthProvider = ({ children }) => {
     if (token) {
       obtenerPerfil()
         .then(res => setUsuario(res.data.usuario))
-        .catch(() => localStorage.removeItem('token'))
+        .catch((error) => {
+          if (error.response && error.response.status === 401) {
+            localStorage.removeItem('token');
+          }
+        })
         .finally(() => setCargando(false));
     } else {
       setCargando(false);

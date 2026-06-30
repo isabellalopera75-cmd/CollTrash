@@ -35,4 +35,17 @@ const updateConfig = async (req, res) => {
   }
 };
 
-module.exports = { getConfig, updateConfig };
+const getTelefonosEmergencia = async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT clave, valor FROM configuracion WHERE clave IN ('telefono_grua', 'telefono_ambulancia')"
+    );
+    const telefonos = {};
+    result.rows.forEach(row => { telefonos[row.clave] = row.valor; });
+    res.json({ telefonos });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener teléfonos de emergencia' });
+  }
+};
+
+module.exports = { getConfig, updateConfig, getTelefonosEmergencia };

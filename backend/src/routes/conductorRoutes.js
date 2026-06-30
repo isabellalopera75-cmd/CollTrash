@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../config/database');
 const {
   iniciarRuta, actualizarSector,
-  registrarDescarga, completarDescarga,
+  registrarDescarga, completarDescarga, obtenerDescarga,
   registrarGPS, reportarIncidencia, finalizarRuta
 } = require('../controllers/conductorController');
 const { verificarToken, soloConductor } = require('../middlewares/authMiddleware');
@@ -46,7 +46,7 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
        JOIN vehiculos    v  ON v.id  = rf.vehiculo_id
        JOIN jornadas     j  ON j.id  = rf.jornada_id
-        WHERE rf.conductor_default_id = $1 AND a.fecha = $2 AND a.estado IN ('pendiente', 'activa')
+        WHERE a.conductor_id = $1 AND a.fecha = $2 AND a.estado IN ('pendiente', 'activa')
         ORDER BY 
           CASE 
             WHEN a.estado = 'activa' THEN 0
@@ -119,6 +119,7 @@ router.put('/asignacion/:id/sector/:sectorId/progreso', verificarToken, actualiz
 
 // ── Descargas e Incidencias ──────────────────────────────────
 router.post('/asignacion/:id/descargas', verificarToken, registrarDescarga);
+router.get('/asignacion/:id/descargas/:descargaId', verificarToken, obtenerDescarga);
 router.put('/asignacion/:id/descargas/:descargaId/completar', verificarToken, completarDescarga);
 router.post('/asignacion/:id/incidencias', verificarToken, reportarIncidencia);
 
@@ -143,7 +144,7 @@ router.put('/reporte/:reporteId/resolver', verificarToken, async (req, res) => {
        FROM reportes_ciudadanos r
        JOIN asignaciones_semanales a ON a.id = r.asignacion_id
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-       WHERE r.id = $1 AND rf.conductor_default_id = $2 AND a.estado = 'activa'`,
+       WHERE r.id = $1 AND a.conductor_id = $2 AND a.estado = 'activa'`,
       [reporteId, conductorId]
     );
 
@@ -151,10 +152,10 @@ router.put('/reporte/:reporteId/resolver', verificarToken, async (req, res) => {
       return res.status(403).json({ mensaje: 'No autorizado. El reporte no pertenece a su ruta activa.' });
     }
 
-    // 2. Marcar el reporte como resuelto
+    // 2. Marcar el reporte como atendido
     const resultado = await pool.query(
       `UPDATE reportes_ciudadanos 
-       SET estado = 'resuelto', updated_at = NOW() 
+       SET estado = 'atendido', atendido_at = NOW() 
        WHERE id = $1 RETURNING *`,
       [reporteId]
     );

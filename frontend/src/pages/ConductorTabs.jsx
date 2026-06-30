@@ -107,7 +107,16 @@ export function TabRuta({ paradas, posicion, asignacion, reportesCiudadanos = []
 }
 
 // ─── Tab Paradas ─────────────────────────────────────────────
-export function TabParadas({ paradas, onCompletar, completando, reportesCiudadanos = [], onResolverReporte }) {
+export function TabParadas({ 
+  paradas, 
+  onCompletar, 
+  completando, 
+  reportesCiudadanos = [], 
+  onResolverReporte,
+  iniciarDescarga,
+  completarDescarga,
+  descargaActiva
+}) {
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* SECCIÓN 1: PARADAS OFICIALES */}
@@ -148,19 +157,67 @@ export function TabParadas({ paradas, onCompletar, completando, reportesCiudadan
                       ✓ {new Date(p.completado_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   )}
-                  {activa && <div style={{ fontSize: '11px', color: '#F59E0B', marginTop: '2px' }}>En curso</div>}
+                  {activa && (
+                    <div style={{ fontSize: '11px', color: '#F59E0B', marginTop: '2px' }}>
+                      {descargaActiva && parseInt(descargaActiva.sector_asignacion_id) === parseInt(p.id) ? '⏸️ Pausado (Descarga)' : 'En curso'}
+                    </div>
+                  )}
                   {!completada && !activa && <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>Pendiente</div>}
                 </div>
 
-                {/* Botón completar */}
+                {/* Botones de acción */}
                 {activa && (
-                  <button
-                    onClick={() => onCompletar(p.id)}
-                    disabled={completando}
-                    style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#000', fontWeight: 700, fontSize: '12px', cursor: completando ? 'wait' : 'pointer', flexShrink: 0 }}
-                  >
-                    {completando ? <><i className="bi bi-arrow-repeat"></i> Marcando…</> : 'Completar'}
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+                    {descargaActiva && parseInt(descargaActiva.sector_asignacion_id) === parseInt(p.id) ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <button
+                          onClick={() => completarDescarga()}
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#F59E0B', color: '#000', fontWeight: 700, fontSize: '11px', cursor: 'pointer' }}
+                        >
+                          🏁 Regreso Descarga
+                        </button>
+                        {descargaActiva.latitud_centro && descargaActiva.longitud_centro && (
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${descargaActiva.latitud_centro},${descargaActiva.longitud_centro}&travelmode=driving`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ 
+                              padding: '8px 12px', 
+                              borderRadius: '8px', 
+                              border: 'none', 
+                              background: '#2563eb', 
+                              color: 'white', 
+                              fontWeight: 700, 
+                              fontSize: '11px', 
+                              textDecoration: 'none',
+                              textAlign: 'center',
+                              display: 'inline-block'
+                            }}
+                          >
+                            🗺️ Cómo llegar
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => onCompletar(p.id)}
+                          disabled={completando || !!descargaActiva}
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#000', fontWeight: 700, fontSize: '11px', cursor: (completando || !!descargaActiva) ? 'not-allowed' : 'pointer', opacity: !!descargaActiva ? 0.5 : 1 }}
+                        >
+                          {completando ? 'Marcando…' : 'Completar'}
+                        </button>
+                        
+                        <button
+                          onClick={() => iniciarDescarga(p.id)}
+                          disabled={!!descargaActiva}
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #F59E0B', background: 'transparent', color: '#F59E0B', fontWeight: 700, fontSize: '11px', cursor: !!descargaActiva ? 'not-allowed' : 'pointer', opacity: !!descargaActiva ? 0.5 : 1 }}
+                        >
+                          🚛 Pausa Descarga
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -239,10 +296,11 @@ export function TabParadas({ paradas, onCompletar, completando, reportesCiudadan
 
 // ─── Tab Novedades ───────────────────────────────────────────
 const TIPOS = [
-  { key: 'contenedor_lleno', label: '🗑️ Contenedor lleno o desbordado' },
-  { key: 'via_bloqueada',    label: '🚧 Vía bloqueada o acceso impedido' },
-  { key: 'residuos_fuera',   label: '♻️ Residuos fuera del punto' },
-  { key: 'otro',             label: '📋 Otro (describir)' },
+  { key: 'via_obstruida',      label: '🚧 Vía obstruida o acceso impedido' },
+  { key: 'falla_motor',        label: '🔧 Falla de motor / Mecánica' },
+  { key: 'accidente',          label: '💥 Accidente de tránsito' },
+  { key: 'operario_lesionado', label: '🚑 Operario lesionado' },
+  { key: 'otro',               label: '📋 Otro (describir)' },
 ];
 
 export function TabNovedades({ asignacionId, conductorId, onReportarNovedad, isOnline }) {
@@ -251,53 +309,124 @@ export function TabNovedades({ asignacionId, conductorId, onReportarNovedad, isO
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [fueOffline, setFueOffline] = useState(false);
+  const [respuestaIncidencia, setRespuestaIncidencia] = useState(null);
+
+  const capturarUbicacion = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => { 
+          console.warn("⚠️ Error GPS:", err); 
+          resolve(null); 
+        },
+        { timeout: 7000, enableHighAccuracy: true }
+      );
+    });
+  };
 
   const enviar = async (e) => {
     e.preventDefault();
     setEnviando(true);
+    
+    const ubicacion = await capturarUbicacion();
+    const payload = {
+      asignacion_id: asignacionId,
+      conductor_id: conductorId,
+      tipo,
+      descripcion: desc,
+      ...(ubicacion && { lat: ubicacion.lat, lng: ubicacion.lng })
+    };
+
+    let respuestaData = null;
+
     if (onReportarNovedad) {
-      const res = await onReportarNovedad({
-        asignacion_id: asignacionId,
-        conductor_id: conductorId,
-        tipo,
-        descripcion: desc,
-      });
+      const res = await onReportarNovedad(payload);
       setFueOffline(res?.offline);
+      respuestaData = res;
     } else {
       try {
-        await API.post('/incidencias', {
-          asignacion_id: asignacionId,
-          conductor_id: conductorId,
-          tipo,
-          descripcion: desc,
-        });
+        const res = await API.post('/incidencias', payload);
         setFueOffline(false);
+        respuestaData = res.data;
       } catch (err) {
         console.error('Error al enviar novedad:', err.response?.data?.mensaje || err.message);
       }
     }
+    
+    setRespuestaIncidencia(respuestaData);
     setEnviando(false);
     setEnviado(true);
-    setTimeout(() => { setEnviado(false); setTipo(''); setDesc(''); setFueOffline(false); }, 2000);
+
+    if (!respuestaData?.telefono_emergencia) {
+      setTimeout(() => { resetFormulario(); }, 3000);
+    }
+  };
+
+  const resetFormulario = () => {
+    setEnviado(false); setTipo(''); setDesc(''); setFueOffline(false); setRespuestaIncidencia(null);
   };
 
   if (enviado) {
+    const requiereLlamada = !fueOffline && respuestaIncidencia?.telefono_emergencia;
+
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '20px' }}>
+        
         <div style={{ width: 64, height: 64, borderRadius: '50%', background: fueOffline ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)', border: `2px solid ${fueOffline ? '#F59E0B' : '#22c55e'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>
           {fueOffline ? '📶' : '✓'}
         </div>
-        <div style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}>{fueOffline ? 'Guardado sin conexión' : 'Novedad enviada'}</div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center' }}>
-          {fueOffline ? 'Se enviará automáticamente cuando recuperes la conexión.' : 'El administrador fue notificado de inmediato.'}
+        
+        <div style={{ fontSize: '18px', fontWeight: 700, color: 'white', textAlign: 'center' }}>
+          {fueOffline ? 'Guardado sin conexión' : 'Reporte Enviado'}
         </div>
+
+        {requiereLlamada && (
+          <div style={{ marginTop: '16px', width: '100%', maxWidth: '300px' }}>
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '2px solid #ef4444', borderRadius: '12px', padding: '20px', textAlign: 'center', boxShadow: '0 8px 24px rgba(239, 68, 68, 0.2)' }}>
+              
+              <div style={{ fontSize: '14px', color: '#fca5a5', marginBottom: '16px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                {tipo === 'operario_lesionado' ? '🚑 Emergencia Médica' : '🔧 Asistencia Vial'}
+              </div>
+              
+              <a 
+                href={`tel:${respuestaIncidencia.telefono_emergencia.replace(/\s+/g, '')}`} 
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                  padding: '16px', background: '#ef4444', color: 'white', 
+                  borderRadius: '8px', fontSize: '18px', fontWeight: 800, textDecoration: 'none',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)'
+                }}
+              >
+                <i className="bi bi-telephone-fill"></i>
+                Llamar Ahora
+              </a>
+
+              <div style={{ fontSize: '12px', color: '#fca5a5', marginTop: '16px', lineHeight: 1.4 }}>
+                {tipo === 'operario_lesionado' 
+                  ? 'El Administrador ya fue notificado. Llama a la ambulancia de inmediato.' 
+                  : `Contacta a la grúa al ${respuestaIncidencia.telefono_emergencia}.`}
+              </div>
+
+            </div>
+
+            <button onClick={resetFormulario} style={{ width: '100%', marginTop: '20px', padding: '12px', background: 'transparent', border: '1px solid #4b5563', color: '#9ca3af', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
+              Volver al panel principal
+            </button>
+          </div>
+        )}
+
+        {!requiereLlamada && (
+          <div style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center', marginTop: '8px' }}>
+            {fueOffline ? 'Se enviará automáticamente cuando recuperes la conexión.' : 'El administrador fue notificado de inmediato y gestionará tu reporte.'}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-      {/* Banner advertencia */}
       <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', marginBottom: '20px' }}>
         <div style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444', marginBottom: '4px' }}>⚠️ AVISO IMPORTANTE</div>
         <div style={{ fontSize: '12px', color: '#fca5a5' }}>Cualquier reporte que envíes será notificado de inmediato al administrador. Usa esta función solo para incidentes reales.</div>
@@ -315,8 +444,9 @@ export function TabNovedades({ asignacionId, conductorId, onReportarNovedad, isO
         {tipo && (
           <textarea
             value={desc} onChange={e => setDesc(e.target.value)}
-            placeholder="Describe con más detalle lo que encontraste…"
+            placeholder="Describe con más detalle la situación..."
             rows={3}
+            required
             style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontFamily: 'Inter, sans-serif', fontSize: '13px', resize: 'none', outline: 'none' }}
           />
         )}
@@ -326,7 +456,7 @@ export function TabNovedades({ asignacionId, conductorId, onReportarNovedad, isO
           disabled={!tipo || enviando}
           style={{ padding: '14px', borderRadius: '10px', border: 'none', background: tipo ? '#ef4444' : '#374151', color: tipo ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: tipo ? 'pointer' : 'not-allowed', marginTop: '4px' }}
         >
-          {enviando ? '⏳ Enviando...' : '📡 Reportar novedad'}
+          {enviando ? '⏳ Capturando ubicación y enviando...' : '📡 Reportar novedad'}
         </button>
       </form>
     </div>

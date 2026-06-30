@@ -1,15 +1,85 @@
 import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, CircleMarker } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { io } from 'socket.io-client';
+import API from '../services/api';
 
 export default function Monitoreo() {
   const socketRef = useRef(null);
   const [vehiculos, setVehiculos] = useState([]);
+  const [incidencias, setIncidencias] = useState([]);
+
+  const [incidenciaSeleccionada, setIncidenciaSeleccionada] = useState(null);
+  const [resolucionForm, setResolucionForm] = useState({ resolucion: '', nuevo_conductor_id: '', nuevo_vehiculo_id: '', eta_minutos: '' });
+  const [telefonos, setTelefonos] = useState({ telefono_grua: '', telefono_ambulancia: '' });
+  const [recursosLibres, setRecursosLibres] = useState({ conductores: [], vehiculos: [] });
+  const [cargandoRecursos, setCargandoRecursos] = useState(false);
+
+  const fetchIncidencias = async () => {
+    try {
+      const res = await API.get('/incidencias');
+      if (res.data?.incidencias) {
+        const descartadas = JSON.parse(localStorage.getItem('colltrash_incidencias_descartadas') || '[]');
+        const idsBackend = res.data.incidencias.map(i => i.id);
+        const descartadasLimpias = descartadas.filter(id => idsBackend.includes(id));
+        localStorage.setItem('colltrash_incidencias_descartadas', JSON.stringify(descartadasLimpias));
+
+        setIncidencias(res.data.incidencias.filter(i => !descartadasLimpias.includes(i.id)));
+      }
+    } catch (error) {
+      console.error("Error cargando incidencias:", error);
+    }
+  };
+
+  const handleAbrirModalResolucion = async (incidencia) => {
+    setIncidenciaSeleccionada(incidencia);
+    setResolucionForm({ resolucion: '', nuevo_conductor_id: '', nuevo_vehiculo_id: '', eta_minutos: '' });
+    
+    if (incidencia.tipo === 'operario_lesionado' || incidencia.tipo === 'falla_motor' || incidencia.tipo === 'accidente') {
+      try {
+        const resTel = await API.get('/config/telefonos');
+        setTelefonos(resTel.data.telefonos);
+      } catch (e) { console.error('Error cargando teléfonos', e); }
+    }
+
+    if (incidencia.tipo === 'falla_motor' || incidencia.tipo === 'accidente') {
+      setCargandoRecursos(true);
+      try {
+        const resRec = await API.get('/rutas/recursos-libres');
+        setRecursosLibres(resRec.data);
+      } catch (e) { console.error('Error cargando recursos', e); }
+      finally { setCargandoRecursos(false); }
+    }
+  };
+
+  const submitResolucion = async (e) => {
+    e.preventDefault();
+    try {
+      await API.put(`/incidencias/${incidenciaSeleccionada.id}/resolver`, resolucionForm);
+      const resueltaId = incidenciaSeleccionada.id;
+      setIncidenciaSeleccionada(null);
+      setIncidencias(prev => prev.filter(i => i.id !== resueltaId));
+      
+      const descartadas = JSON.parse(localStorage.getItem('colltrash_incidencias_descartadas') || '[]');
+      localStorage.setItem('colltrash_incidencias_descartadas', JSON.stringify(descartadas.filter(id => id !== resueltaId)));
+    } catch(err) {
+      alert('Error al resolver la incidencia. Verifica los campos.');
+    }
+  };
+
+  const descartarVisualmente = (id) => {
+    setIncidencias(prev => prev.filter(i => i.id !== id));
+    const descartadas = JSON.parse(localStorage.getItem('colltrash_incidencias_descartadas') || '[]');
+    if (!descartadas.includes(id)) {
+      localStorage.setItem('colltrash_incidencias_descartadas', JSON.stringify([...descartadas, id]));
+    }
+  };
 
   useEffect(() => {
+    fetchIncidencias();
+
     const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
     const token = localStorage.getItem('token');
     socketRef.current = io(socketUrl, {
@@ -30,6 +100,20 @@ export default function Monitoreo() {
       alert(`⚠️ Novedad del Conductor ${data.conductor}:\n\n${data.mensaje}`);
     });
 
+    socketRef.current.on('ruta_finalizada', (data) => {
+      setVehiculos(prev => prev.filter(v => v.asignacion_id !== data.asignacion_id));
+    });
+
+    socketRef.current.on('nueva_incidencia', (incidencia) => {
+      setIncidencias(prev => [incidencia, ...prev.filter(i => i.id !== incidencia.id)]);
+    });
+
+    socketRef.current.on('incidencia_resuelta', (incidencia_id) => {
+      setIncidencias(prev => prev.filter(i => i.id !== incidencia_id));
+      const descartadas = JSON.parse(localStorage.getItem('colltrash_incidencias_descartadas') || '[]');
+      localStorage.setItem('colltrash_incidencias_descartadas', JSON.stringify(descartadas.filter(id => id !== incidencia_id)));
+    });
+
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
@@ -37,8 +121,9 @@ export default function Monitoreo() {
 
   const getStatusColor = (status) => {
     if (status === 'en_ruta') return 'var(--color-primary)';
-    if (status === 'descargando') return 'var(--color-accent)';
-    if (status === 'incidente') return 'var(--color-danger)';
+    if (status === 'en_descarga' || status === 'descargando') return 'var(--color-accent)';
+    if (status === 'regresando_a_ruta') return 'var(--color-warning)';
+    if (status === 'en_incidencia' || status === 'incidente') return 'var(--color-danger)';
     return 'var(--text-muted)';
   };
 
@@ -83,7 +168,7 @@ export default function Monitoreo() {
                       </div>
                    </div>
                    <span className="status-badge" style={{ fontSize: '8px', border: 'none', background: 'color-mix(in oklch, ' + getStatusColor(v.estado) + ', transparent 90%)', color: getStatusColor(v.estado) }}>
-                     ● {v.estado.replace('_', ' ').toUpperCase()}
+                      ● {v.estado === 'en_descarga' ? v.sector.toUpperCase() : v.estado === 'regresando_a_ruta' ? 'REGRESANDO A RUTA' : v.estado.replace('_', ' ').toUpperCase()}
                    </span>
                 </div>
 
@@ -117,7 +202,16 @@ export default function Monitoreo() {
                 radius={12} 
                 pathOptions={{ color: getStatusColor(v.estado), fillColor: getStatusColor(v.estado), fillOpacity: 0.8 }}
               >
-                 <div style={{ color: 'white', fontSize: '10px', fontWeight: 'bold' }}>🚚</div>
+                 <Popup>
+                   <div style={{ color: '#000', fontSize: '12px', padding: '4px' }}>
+                     <strong style={{ fontSize: '13px' }}>{v.cod}</strong> ({v.conductor})<br />
+                     <span style={{ color: getStatusColor(v.estado), fontWeight: 'bold' }}>
+                       ● {v.estado === 'en_descarga' ? v.sector : v.estado === 'regresando_a_ruta' ? 'Regresando a ruta' : v.estado.replace('_', ' ')}
+                     </span><br />
+                     <span>Progreso: {v.progreso}%</span><br />
+                     <span>Distancia: {v.km_recorridos} KM</span>
+                   </div>
+                 </Popup>
               </CircleMarker>
             ))}
           </MapContainer>
@@ -130,9 +224,58 @@ export default function Monitoreo() {
              </div>
           </div>
 
-          <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 1000 }}>
-             <div className="card" style={{ padding: '8px 16px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--color-primary)', fontSize: '10px', fontWeight: 600 }}>
+          <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
+             <div className="card" style={{ padding: '8px 16px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--color-primary)', fontSize: '10px', fontWeight: 600, pointerEvents: 'auto' }}>
                 📡 Actualiza cada 30s
+             </div>
+
+             {/* PANEL FLOTANTE DE INCIDENCIAS */}
+             <div style={{
+               display: 'flex', flexDirection: 'column', gap: '12px',
+               width: '320px', maxHeight: 'calc(100vh - 120px)',
+               overflowY: 'auto', pointerEvents: 'none'
+             }}>
+               {incidencias.map((incidencia) => {
+                 const minutosAntiguedad = (new Date() - new Date(incidencia.created_at)) / (1000 * 60);
+                 const esReciente = minutosAntiguedad < 10; 
+                 
+                 return (
+                   <div key={incidencia.id} style={{
+                     backgroundColor: 'var(--bg-card, #ffffff)', borderRadius: '8px',
+                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '16px',
+                     pointerEvents: 'auto', 
+                     borderLeft: `4px solid ${['accidente', 'operario_lesionado'].includes(incidencia.tipo) ? '#ef4444' : '#f59e0b'}`,
+                     opacity: esReciente ? 1 : 0.65, 
+                     transition: 'opacity 0.3s ease', position: 'relative'
+                   }}>
+                     <button onClick={() => descartarVisualmente(incidencia.id)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '14px' }}>✕</button>
+                     
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '18px' }}>
+                          {['accidente', 'operario_lesionado'].includes(incidencia.tipo) ? '🚨' : 
+                           incidencia.tipo === 'falla_motor' ? '🔧' : '⚠️'}
+                        </span>
+                        <h5 style={{ margin: 0, fontSize: '13px', fontWeight: 600, textTransform: 'capitalize', color: ['accidente', 'operario_lesionado'].includes(incidencia.tipo) ? '#ef4444' : '#f59e0b' }}>
+                          {incidencia.tipo.replace('_', ' ')}
+                        </h5>
+                     </div>
+                     
+                     <div style={{ fontSize: '12px', color: '#555', marginBottom: '4px' }}>
+                       <strong>Conductor:</strong> {incidencia.conductor_nombre} <br/>
+                       <strong>Vehículo:</strong> {incidencia.vehiculo_placa}
+                     </div>
+                     <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 12px', fontStyle: 'italic' }}>
+                       "{incidencia.descripcion || 'Sin descripción adicional'}"
+                     </p>
+                     
+                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                       <button onClick={() => handleAbrirModalResolucion(incidencia)} style={{ padding: '6px 10px', fontSize: '11px', background: 'var(--color-primary, #22c55e)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>
+                         Gestionar / Resolver
+                       </button>
+                     </div>
+                   </div>
+                 );
+               })}
              </div>
           </div>
 
@@ -148,6 +291,91 @@ export default function Monitoreo() {
           </div>
         </div>
       </div>
+
+      {/* Modal Dinámico de Resolución */}
+      {incidenciaSeleccionada && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+          <div className="card" style={{ width: '450px', border: '1px solid var(--color-primary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', color: 'white', textTransform: 'capitalize' }}>
+                Gestionar: {incidenciaSeleccionada.tipo.replace('_', ' ')}
+              </h3>
+              <button onClick={() => setIncidenciaSeleccionada(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <form onSubmit={submitResolucion} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* CASO 1: operario_lesionado */}
+              {incidenciaSeleccionada.tipo === 'operario_lesionado' && (
+                <>
+                  <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', padding: '15px', borderRadius: '8px', textAlign: 'center' }}>
+                    <i className="bi bi-telephone-outbound-fill" style={{ fontSize: '24px', color: '#ef4444' }}></i>
+                    <h4 style={{ color: '#ef4444', margin: '10px 0 5px' }}>Ambulancia: {telefonos.telefono_ambulancia || 'Cargando...'}</h4>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Contacta a emergencias inmediatamente. No cierres este panel hasta haber despachado ayuda.</p>
+                  </div>
+                  <button type="submit" className="btn btn-primary" style={{ background: '#ef4444', border: 'none', width: '100%', padding: '12px', fontWeight: 'bold' }}>
+                    Marcar como Ambulancia Gestionada
+                  </button>
+                </>
+              )}
+
+              {/* CASO 2: falla_motor o accidente */}
+              {(incidenciaSeleccionada.tipo === 'falla_motor' || incidenciaSeleccionada.tipo === 'accidente') && (
+                <>
+                  <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '12px', borderRadius: '8px', textAlign: 'center', marginBottom: '8px' }}>
+                    <i className="bi bi-truck" style={{ fontSize: '20px', color: '#f59e0b' }}></i>
+                    <h4 style={{ color: '#f59e0b', margin: '5px 0' }}>Grúa de Rescate: {telefonos.telefono_grua || 'Cargando...'}</h4>
+                  </div>
+
+                  {cargandoRecursos ? <p style={{ fontSize: '12px', textAlign: 'center' }}>Buscando personal y vehículos libres...</p> : (
+                    <>
+                      <div>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>1. Conductor de Relevo</label>
+                        <select required value={resolucionForm.nuevo_conductor_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_conductor_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }}>
+                          <option value="">Selecciona conductor libre...</option>
+                          {recursosLibres.conductores
+                            .filter(c => c.id !== incidenciaSeleccionada.conductor_id)
+                            .map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>2. Vehículo de Reemplazo</label>
+                        <select required value={resolucionForm.nuevo_vehiculo_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_vehiculo_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }}>
+                          <option value="">Selecciona vehículo libre...</option>
+                          {recursosLibres.vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa} ({v.capacidad_ton} Ton)</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>3. ETA Estimado de Rescate (Minutos)</label>
+                        <input required type="number" value={resolucionForm.eta_minutos} onChange={e => setResolucionForm({...resolucionForm, eta_minutos: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }} placeholder="Ej: 15" />
+                      </div>
+                    </>
+                  )}
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '10px', fontWeight: 'bold' }}>
+                    Asignar Relevo y Cerrar Incidencia
+                  </button>
+                </>
+              )}
+
+              {/* CASO 3: via_obstruida u otro */}
+              {incidenciaSeleccionada.tipo !== 'operario_lesionado' && incidenciaSeleccionada.tipo !== 'falla_motor' && incidenciaSeleccionada.tipo !== 'accidente' && (
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Nota de Resolución (Opcional)</label>
+                    <textarea value={resolucionForm.resolucion} onChange={e => setResolucionForm({...resolucionForm, resolucion: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', minHeight: '80px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }} placeholder="Ej: Se le indicó al conductor tomar la calle alterna..." />
+                  </div>
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', fontWeight: 'bold' }}>
+                    Cerrar Incidencia
+                  </button>
+                </>
+              )}
+
+            </form>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

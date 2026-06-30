@@ -5,8 +5,8 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
   try {
     const resultado = await pool.query(
        `SELECT asig.*, 
-              rf.conductor_default_id AS conductor_id,
-              rf.vehiculo_id AS vehiculo_id,
+              COALESCE(asig.conductor_id, rf.conductor_default_id) AS conductor_id,
+              COALESCE(asig.vehiculo_id, rf.vehiculo_id) AS vehiculo_id,
               rf.nombre AS ruta_nombre,
               u.nombre AS conductor_nombre,
               v.placa AS vehiculo_placa,
@@ -20,8 +20,8 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
               ) as progreso
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
-       JOIN usuarios u ON u.id = rf.conductor_default_id
-       JOIN vehiculos v ON v.id = rf.vehiculo_id
+       JOIN usuarios u ON u.id = COALESCE(asig.conductor_id, rf.conductor_default_id)
+       JOIN vehiculos v ON v.id = COALESCE(asig.vehiculo_id, rf.vehiculo_id)
        JOIN jornadas j ON j.id = rf.jornada_id
        WHERE asig.fecha = $1
        ORDER BY j.hora_inicio ASC`,
@@ -123,19 +123,38 @@ const reasignarAsignacion = async (req, res) => {
     const conductorOriginal = conductor_default_id || null;
     const vehiculoOriginal = asigActual.rows[0].vehiculo_id || null;
 
-    // Registrar el cambio (guardar conductor/vehículo original para auditoría y posible reversión)
-    await pool.query(
-      `INSERT INTO cambios_conductor 
-       (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, es_permanente)
-       VALUES ($1, $2, $3, $4, $5, $5, $6)`,
-      [ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, fecha, !!es_permanente]
-    );
+    // Usar transacción para garantizar atomicidad
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // SIEMPRE actualizar rutas_fijas para que el nuevo conductor vea la ruta en su dashboard
-    await pool.query(
-      `UPDATE rutas_fijas SET conductor_default_id = $1, vehiculo_id = $2 WHERE id = $3`,
-      [conductor_id, vehiculo_id, ruta_fija_id]
-    );
+      // Registrar el cambio (guardar conductor/vehículo original para auditoría y posible reversión)
+      await client.query(
+        `INSERT INTO cambios_conductor 
+         (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, es_permanente)
+         VALUES ($1, $2, $3, $4, $5, $5, $6)`,
+        [ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, fecha, !!es_permanente]
+      );
+
+      // SIEMPRE actualizar rutas_fijas para que el nuevo conductor vea la ruta en su dashboard
+      await client.query(
+        `UPDATE rutas_fijas SET conductor_default_id = $1, vehiculo_id = $2 WHERE id = $3`,
+        [conductor_id, vehiculo_id, ruta_fija_id]
+      );
+
+      // ACTUALIZAR asignaciones_semanales del día para que el nuevo conductor sea el dueño de la asignación
+      await client.query(
+        `UPDATE asignaciones_semanales SET conductor_id = $1 WHERE id = $2`,
+        [conductor_id, id]
+      );
+
+      await client.query('COMMIT');
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      throw txError;
+    } finally {
+      client.release();
+    }
 
     res.json({ mensaje: 'Asignación reasignada con éxito', asignacionId: id, permanente: !!es_permanente });
   } catch (error) {
@@ -149,9 +168,12 @@ const habilitarInicioTardio = async (req, res) => {
   const admin_id = req.usuario.id;
   const { motivo } = req.body;
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     // 1. Habilitar la asignación
-    await pool.query(
+    await client.query(
       `UPDATE asignaciones_semanales 
        SET habilitado_por_admin = TRUE, inicio_tardio = TRUE
        WHERE id = $1`,
@@ -159,25 +181,25 @@ const habilitarInicioTardio = async (req, res) => {
     );
 
     // 2. Registrar en novedades_operativas
-    await pool.query(
+    await client.query(
       `INSERT INTO novedades_operativas (asignacion_id, admin_id, tipo_novedad, descripcion)
        VALUES ($1, $2, $3, $4)`,
       [id, admin_id, 'REACTIVACION_MANUAL', motivo || 'Admin habilitó inicio fuera de tiempo']
     );
 
+    await client.query('COMMIT');
     res.json({ mensaje: 'Inicio tardío habilitado exitosamente.' });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error(error);
     res.status(500).json({ mensaje: 'Error al habilitar inicio tardío.' });
+  } finally {
+    client.release();
   }
 };
 
 const obtenerAsignacionesDisponibles = async (req, res) => {
   try {
-    // Generar las asignaciones de los próximos 7 días en segundo plano (asíncronamente) para no bloquear el request
-    const { generarAsignaciones } = require('../services/cronService');
-    generarAsignaciones().catch(err => console.error('Error al generar asignaciones en disponibles (segundo plano):', err.message));
-
     // Obtener asignaciones desde hoy y los próximos 2 días (total 3 días en el futuro cercano)
     const resultado = await pool.query(
       `SELECT asig.id, 

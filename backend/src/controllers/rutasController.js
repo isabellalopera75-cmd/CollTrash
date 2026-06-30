@@ -306,6 +306,15 @@ const editarRutaFija = async (req, res) => {
     }
 
     // Sincronizar asignaciones semanales con el cambio
+    if (conductor_default_id !== undefined || vehiculo_id !== undefined) {
+      await pool.query(
+        `UPDATE asignaciones_semanales 
+         SET conductor_id = COALESCE($1, conductor_id),
+             vehiculo_id = COALESCE($2, vehiculo_id)
+         WHERE ruta_fija_id = $3 AND estado = 'pendiente' AND fecha >= CURRENT_DATE`,
+        [conductor_default_id, vehiculo_id, id]
+      );
+    }
     await generarAsignaciones();
 
     // Auditoría
@@ -592,6 +601,44 @@ const editarJornada = async (req, res) => {
 const restaurarRuta = async (req, res) => {
   const { id } = req.params;
   try {
+    const rutaParaRestaurar = await pool.query(
+      'SELECT nombre, conductor_default_id, vehiculo_id, jornada_id, dias_semana_arr FROM rutas_fijas WHERE id = $1',
+      [id]
+    );
+
+    if (rutaParaRestaurar.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Ruta no encontrada' });
+    }
+
+    const { conductor_default_id, vehiculo_id, jornada_id, dias_semana_arr } = rutaParaRestaurar.rows[0];
+
+    // REGLA DE ORO
+    const rutasExistentes = await pool.query(
+      `SELECT nombre, dias_semana_arr, conductor_default_id, vehiculo_id
+       FROM rutas_fijas 
+       WHERE (conductor_default_id = $1 OR vehiculo_id = $2)
+       AND jornada_id = $3
+       AND activo = TRUE`,
+      [conductor_default_id, vehiculo_id, jornada_id]
+    );
+
+    for (const ruta of rutasExistentes.rows) {
+      const diasOcupados = ruta.dias_semana_arr || [];
+      const coincidencia = dias_semana_arr.filter(diaN => 
+        diasOcupados.some(diaO => diaN === diaO)
+      );
+
+      if (coincidencia.length > 0) {
+        const esConductor = ruta.conductor_default_id == conductor_default_id;
+        const sujeto = esConductor ? `El conductor` : `El vehículo`;
+        const razon = esConductor ? `ya tiene asignada la ruta "${ruta.nombre}"` : `ya está siendo usado en la ruta "${ruta.nombre}"`;
+        
+        return res.status(400).json({ 
+          mensaje: `❌ Error de Logística al Restaurar: ${sujeto} ${razon} para los días: [${coincidencia.join(', ')}] en la misma jornada. Libere el horario antes de restaurar.` 
+        });
+      }
+    }
+
     const resultado = await pool.query(
       'UPDATE rutas_fijas SET activo = TRUE WHERE id = $1 RETURNING *',
       [id]
@@ -624,6 +671,41 @@ const restaurarRuta = async (req, res) => {
   }
 };
 
+const obtenerRecursosLibres = async (req, res) => {
+  try {
+    const resultConductores = await pool.query(`
+      SELECT id, nombre
+      FROM usuarios 
+      WHERE rol = 'conductor' AND activo = TRUE 
+      AND id NOT IN (
+        SELECT conductor_id 
+        FROM asignaciones_semanales 
+        WHERE fecha = CURRENT_DATE AND estado = 'activa'
+      )
+    `);
+
+    const resultVehiculos = await pool.query(`
+      SELECT v.id, v.placa, v.capacidad_ton 
+      FROM vehiculos v 
+      WHERE v.activo = TRUE 
+      AND v.id NOT IN (
+        SELECT COALESCE(a.vehiculo_id, rf.vehiculo_id) 
+        FROM asignaciones_semanales a 
+        JOIN rutas_fijas rf ON a.ruta_fija_id = rf.id 
+        WHERE a.fecha = CURRENT_DATE AND a.estado = 'activa'
+      )
+    `);
+
+    res.json({
+      conductores: resultConductores.rows,
+      vehiculos: resultVehiculos.rows
+    });
+  } catch (error) {
+    console.error("Error al obtener recursos libres:", error);
+    res.status(500).json({ mensaje: 'Error al obtener recursos libres' });
+  }
+};
+
 module.exports = {
   crearRutaFija,
   obtenerRutasFijas,
@@ -636,5 +718,6 @@ module.exports = {
   crearVehiculo,
   editarVehiculo,
   crearJornada,
-  editarJornada
+  editarJornada,
+  obtenerRecursosLibres
 };

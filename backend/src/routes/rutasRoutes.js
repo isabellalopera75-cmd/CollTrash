@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { crearRutaFija, obtenerRutasFijas, obtenerRutaFijaPorId, editarRutaFija, eliminarRutaFija, restaurarRuta, obtenerVehiculos, obtenerJornadas, crearVehiculo, editarVehiculo, crearJornada, editarJornada } = require('../controllers/rutasController');
+const { crearRutaFija, obtenerRutasFijas, obtenerRutaFijaPorId, editarRutaFija, eliminarRutaFija, restaurarRuta, obtenerVehiculos, obtenerJornadas, crearVehiculo, editarVehiculo, crearJornada, editarJornada, obtenerRecursosLibres } = require('../controllers/rutasController');
 const { verificarToken, soloAdmin } = require('../middlewares/authMiddleware');
 
+router.get('/recursos-libres', verificarToken, soloAdmin, obtenerRecursosLibres);
 router.get('/', verificarToken, soloAdmin, obtenerRutasFijas);
 router.post('/', verificarToken, soloAdmin, crearRutaFija);
 router.get('/vehiculos', verificarToken, soloAdmin, obtenerVehiculos);

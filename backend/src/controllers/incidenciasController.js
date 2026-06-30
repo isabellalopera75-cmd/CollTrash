@@ -53,21 +53,26 @@ const alargarJornada = async (req, res) => {
 
 // Crear incidencia (conductor)
 const crearIncidencia = async (req, res) => {
-  const { asignacion_id, tipo, descripcion } = req.body;
+  const { asignacion_id, tipo, descripcion, lat, lng } = req.body;
   const conductor_id = req.usuario.id;
+
   if (!tipo) return res.status(400).json({ mensaje: 'El tipo de incidencia es obligatorio.' });
   if (!asignacion_id) return res.status(400).json({ mensaje: 'La asignacion es obligatoria para reportar una incidencia.' });
 
-  const tiposPermitidos = ['trancon', 'accidente', 'contenedor_lleno', 'via_bloqueada'];
+  const tiposPermitidos = [
+    'via_obstruida', 'falla_motor', 'accidente', 'operario_lesionado', 'otro'
+  ];
   if (!tiposPermitidos.includes(tipo)) {
     return res.status(400).json({ mensaje: `Tipo debe ser uno de: ${tiposPermitidos.join(', ')}` });
   }
 
   try {
     const asignacion = await pool.query(
-      `SELECT a.id FROM asignaciones_semanales a
+      `SELECT a.id, v.placa as vehiculo_placa 
+       FROM asignaciones_semanales a
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-       WHERE a.id = $1 AND rf.conductor_default_id = $2 AND a.estado = 'activa'`,
+       JOIN vehiculos v ON v.id = COALESCE(a.vehiculo_id, rf.vehiculo_id)
+       WHERE a.id = $1 AND a.conductor_id = $2 AND a.estado = 'activa'`,
       [asignacion_id, conductor_id]
     );
 
@@ -76,23 +81,42 @@ const crearIncidencia = async (req, res) => {
     }
 
     const r = await pool.query(
-      `INSERT INTO incidencias_conductor (asignacion_id, conductor_id, tipo, descripcion, resuelto)
-       VALUES ($1, $2, $3, $4, FALSE) RETURNING *`,
-      [asignacion_id, conductor_id, tipo, descripcion || '']
+      `INSERT INTO incidencias_conductor (asignacion_id, conductor_id, tipo, descripcion, resuelto, lat, lng)
+       VALUES ($1, $2, $3, $4, FALSE, $5, $6) RETURNING *`,
+      [asignacion_id, conductor_id, tipo, descripcion || '', lat || null, lng || null]
     );
+
+    let telefono_emergencia = null;
+    if (tipo === 'operario_lesionado') {
+       const conf = await pool.query("SELECT valor FROM configuracion WHERE clave = 'telefono_ambulancia'");
+       if (conf.rows.length > 0) telefono_emergencia = conf.rows[0].valor;
+    }
 
     // NOTIFICAR ADMIN: Nueva incidencia
     await crearNotificacion({
-      titulo: tipo === 'accidente' ? '🚨 Incidencia Crítica' : '⚠️ Novedad en Ruta',
-      mensaje: `Conductor ${req.usuario.nombre}: ${tipo}. ${descripcion || ''}`,
-      tipo: tipo === 'accidente' ? 'urgente' : 'operativo',
+      titulo: tipo === 'accidente' || tipo === 'operario_lesionado' ? '🚨 Emergencia Crítica' : '⚠️ Novedad en Ruta',
+      mensaje: `Conductor ${req.usuario.nombre}: ${tipo.replace('_', ' ')}. ${descripcion || ''}`,
+      tipo: tipo === 'accidente' || tipo === 'operario_lesionado' ? 'urgente' : 'operativo',
       metadata: { asignacion_id: asignacion_id, incidencia_id: r.rows[0].id, tipo: 'INCIDENCIA' }
     });
 
-    res.status(201).json({ incidencia: r.rows[0] });
+    const { getIo } = require('../config/socket');
+    const io = getIo();
+    if (io) {
+      io.emit('nueva_incidencia', {
+        ...r.rows[0],
+        conductor_nombre: req.usuario.nombre,
+        vehiculo_placa: asignacion.rows[0].vehiculo_placa
+      });
+    }
+
+    res.status(201).json({ 
+      incidencia: r.rows[0],
+      telefono_emergencia 
+    });
   } catch (error) {
     console.error(error.message);
-    res.status(500).json({ mensaje: 'Error al crear incidencia.' });
+    res.status(500).json({ mensaje: 'Error interno al reportar incidencia.' });
   }
 };
 

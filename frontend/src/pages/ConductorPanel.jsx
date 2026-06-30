@@ -51,6 +51,52 @@ export default function ConductorPanel() {
   const [kmFinales, setKmFinales] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [alerta, setAlerta] = useState(null);
+  const [descargaActiva, setDescargaActiva] = useState(null);
+  const [puntosDescarga, setPuntosDescarga] = useState([]);
+  const [mostrarModalDescarga, setMostrarModalDescarga] = useState(false);
+  const [botaderoSeleccionado, setBotaderoSeleccionado] = useState('');
+  const [sectorPausaId, setSectorPausaId] = useState(null);
+  const [mostrarModalCompletarDescarga, setMostrarModalCompletarDescarga] = useState(false);
+  const [toneladasDescarga, setToneladasDescarga] = useState('');
+
+  // Cargar botaderos activos al montar y descarga activa desde localStorage si existe
+  useEffect(() => {
+    const fetchPuntos = async () => {
+      try {
+        const res = await API.get('/puntos-descarga');
+        setPuntosDescarga(res.data.puntos || []);
+      } catch (err) {
+        console.error('Error al cargar puntos de descarga:', err);
+      }
+    };
+    fetchPuntos();
+  }, []);
+
+  useEffect(() => {
+    const hidratarDescarga = async () => {
+      if (!asignacion) return;
+      const saved = localStorage.getItem(`colltrash_descarga_activa_${asignacion.id}`);
+      if (saved) {
+        const descarga = JSON.parse(saved);
+        if (descarga && !descarga.latitud_centro) {
+          try {
+            const res = await API.get(`/conductor/asignacion/${asignacion.id}/descargas/${descarga.id}`);
+            if (res.data.descarga) {
+              setDescargaActiva(res.data.descarga);
+              localStorage.setItem(`colltrash_descarga_activa_${asignacion.id}`, JSON.stringify(res.data.descarga));
+              return;
+            }
+          } catch (err) {
+            console.error('Error al hidratar descarga:', err);
+          }
+        }
+        setDescargaActiva(descarga);
+      } else {
+        setDescargaActiva(null);
+      }
+    };
+    hidratarDescarga();
+  }, [asignacion]);
 
   const sincronizarPendientes = useCallback(async () => {
     const queueStr = localStorage.getItem('colltrash_offline_queue');
@@ -102,6 +148,14 @@ export default function ConductorPanel() {
       });
       cargar(normalizarFecha(notificacion?.metadata?.fecha));
     });
+
+    socketRef.current.on('novedad_atendida', (data) => {
+      setAlerta({
+        titulo: 'REPORTE ATENDIDO',
+        mensaje: data.mensaje || 'Tu reporte ha sido leído y gestionado por el administrador.',
+        onAceptar: () => setAlerta(null)
+      });
+    });
     cargar(); 
     return () => { 
       clearInterval(simRef.current); 
@@ -144,7 +198,14 @@ export default function ConductorPanel() {
   const cargar = async (fechaObjetivo = null) => {
     try {
       setCargando(true);
-      const fechas = fechaObjetivo ? [fechaObjetivo] : [fechaColombia(0), fechaColombia(1), fechaColombia(2)];
+      let fechas;
+      if (fechaObjetivo) {
+        fechas = [fechaObjetivo];
+      } else if (asignacion && asignacion.fecha) {
+        fechas = [asignacion.fecha.split('T')[0]];
+      } else {
+        fechas = [fechaColombia(0), fechaColombia(1), fechaColombia(2)];
+      }
       let ra = null;
       let a = null;
 
@@ -155,7 +216,9 @@ export default function ConductorPanel() {
       }
 
       if (!a) {
-        setAsignacion(null);
+        if (!mostrarModalFin) {
+          setAsignacion(null);
+        }
         setParadas([]);
         setReportesCiudadanos([]);
         setRutaRecorrida(false);
@@ -163,7 +226,9 @@ export default function ConductorPanel() {
         return;
       }
 
-      setAsignacion(a);
+      if (!mostrarModalFin) {
+        setAsignacion(a);
+      }
       setReportesCiudadanos(ra.data.reportesCiudadanos || []);
       if (a) {
         setRutaRecorrida(Boolean(a.ruta_recorrida));
@@ -252,6 +317,12 @@ export default function ConductorPanel() {
 
       } catch (e) {
         console.error('❌ ERROR AL INICIAR RUTA:', e.response?.data || e.message);
+        const errData = e.response?.data;
+        if (errData?.bloqueado || errData?.mensaje) {
+          alert(errData.mensaje || 'Error al iniciar la ruta.');
+        } else {
+          alert('Error de conexión al iniciar ruta.');
+        }
       }
     }
   };
@@ -269,6 +340,7 @@ export default function ConductorPanel() {
 
   const finalizarJornada = async () => {
     if (!toneladas) return alert('Por favor ingresa las toneladas recolectadas');
+    if (!asignacion?.id) return alert('No hay una asignación activa para finalizar.');
     try {
       await API.put(`/conductor/asignacion/${asignacion.id}/finalizar`, { toneladas });
       setIniciado(false);
@@ -288,8 +360,8 @@ export default function ConductorPanel() {
   const reportarNovedad = async (payload) => {
     if (isOnline) {
       try {
-        await API.post('/incidencias', payload);
-        return { offline: false };
+        const res = await API.post('/incidencias', payload);
+        return { offline: false, ...res.data };
       } catch (e) {
         encolarAccionOffline({ tipo: 'novedad', payload, timestamp: Date.now() });
         return { offline: true };
@@ -322,6 +394,56 @@ export default function ConductorPanel() {
     }
     await cargar(normalizarFecha(fechaAsignacion));
     setCompletando(false);
+  };
+
+  const abrirModalDescarga = (saId) => {
+    setSectorPausaId(saId);
+    setMostrarModalDescarga(true);
+  };
+
+  const confirmarIniciarDescarga = async () => {
+    if (!botaderoSeleccionado) return alert("Por favor selecciona un botadero.");
+    try {
+      const res = await API.post(`/conductor/asignacion/${asignacion.id}/descargas`, {
+        sector_asignacion_id: sectorPausaId,
+        punto_pausa_lat: posicion[0],
+        punto_pausa_lng: posicion[1],
+        punto_descarga_id: parseInt(botaderoSeleccionado)
+      });
+      setDescargaActiva(res.data.descarga);
+      localStorage.setItem(`colltrash_descarga_activa_${asignacion.id}`, JSON.stringify(res.data.descarga));
+      setMostrarModalDescarga(false);
+      setBotaderoSeleccionado('');
+      alert("✅ Descarga registrada e inicio de pausa.");
+      cargar();
+    } catch (e) {
+      console.error("Error al registrar descarga:", e.response?.data || e.message);
+      alert(e.response?.data?.mensaje || "Error al registrar la descarga.");
+    }
+  };
+
+  const abrirModalCompletarDescarga = () => {
+    setMostrarModalCompletarDescarga(true);
+  };
+
+  const confirmarCompletarDescarga = async () => {
+    if (!toneladasDescarga || isNaN(toneladasDescarga) || parseFloat(toneladasDescarga) < 0) {
+      return alert("Por favor ingresa un número de toneladas válido (mayor o igual a 0).");
+    }
+    try {
+      await API.put(`/conductor/asignacion/${asignacion.id}/descargas/${descargaActiva.id}/completar`, {
+        toneladas: parseFloat(toneladasDescarga)
+      });
+      localStorage.removeItem(`colltrash_descarga_activa_${asignacion.id}`);
+      setDescargaActiva(null);
+      setMostrarModalCompletarDescarga(false);
+      setToneladasDescarga('');
+      alert("✅ Descarga completada. Sector reactivado.");
+      cargar();
+    } catch (e) {
+      console.error("Error al completar descarga:", e.response?.data || e.message);
+      alert(e.response?.data?.mensaje || "Error al completar la descarga.");
+    }
   };
 
   const total = paradas.length;
@@ -429,6 +551,48 @@ export default function ConductorPanel() {
           </div>
         )}
 
+        {/* INDICADOR DE DESCARGA ACTIVA Y BOTÓN DE NAVEGACIÓN */}
+        {descargaActiva && (
+          <div style={{ padding: '12px 16px', background: 'rgba(245, 158, 11, 0.15)', borderBottom: `1px solid ${s.border}`, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="dot-pulsar" style={{ width: 8, height: 8, borderRadius: '50%', background: s.amber, display: 'inline-block' }}></span>
+              <span style={{ fontSize: '12px', color: '#fde047', fontWeight: 600, flex: 1 }}>
+                🚛 Trayecto a descarga activo
+              </span>
+              <button 
+                onClick={abrirModalCompletarDescarga}
+                style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: s.amber, color: '#000', fontWeight: 700, fontSize: '11px', cursor: 'pointer' }}
+              >
+                Regresar
+              </button>
+            </div>
+            {descargaActiva.latitud_centro && descargaActiva.longitud_centro && (
+              <a 
+                href={`https://www.google.com/maps/dir/?api=1&destination=${descargaActiva.latitud_centro},${descargaActiva.longitud_centro}&travelmode=driving`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '8px', 
+                  padding: '10px', 
+                  borderRadius: '8px', 
+                  background: '#2563eb', 
+                  color: 'white', 
+                  fontWeight: 700, 
+                  fontSize: '12px', 
+                  textDecoration: 'none',
+                  textAlign: 'center',
+                  boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)'
+                }}
+              >
+                <i className="bi bi-geo-alt-fill"></i> Cómo llegar (Google Maps)
+              </a>
+            )}
+          </div>
+        )}
+
         {/* TABS */}
         <div style={{ display: 'flex', background: s.card, borderBottom: `1px solid ${s.border}` }}>
           {[['ruta','bi-map-fill','Ruta'],['paradas','bi-list-check','Sectores'],['novedades','bi-exclamation-triangle-fill','Novedades']].map(([key,icon,label]) => {
@@ -528,7 +692,18 @@ export default function ConductorPanel() {
             )}
 
             {tab === 'ruta' && <TabRuta paradas={paradas} posicion={posicion} asignacion={asignacion} reportesCiudadanos={reportesCiudadanos} />}
-            {tab === 'paradas' && <TabParadas paradas={paradas} onCompletar={completarParada} completando={completando} reportesCiudadanos={reportesCiudadanos} onResolverReporte={resolverReporte} />}
+            {tab === 'paradas' && (
+              <TabParadas 
+                paradas={paradas} 
+                onCompletar={completarParada} 
+                completando={completando} 
+                reportesCiudadanos={reportesCiudadanos} 
+                onResolverReporte={resolverReporte} 
+                iniciarDescarga={abrirModalDescarga}
+                completarDescarga={abrirModalCompletarDescarga}
+                descargaActiva={descargaActiva}
+              />
+            )}
             {tab === 'novedades' && (
               asignacion && iniciado
                 ? <TabNovedades asignacionId={asignacion.id} conductorId={usuario?.id} onReportarNovedad={reportarNovedad} isOnline={isOnline} />
@@ -636,6 +811,81 @@ export default function ConductorPanel() {
             >
               Entendido
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Iniciar Pausa de Descarga */}
+      {mostrarModalDescarga && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ background: '#111', padding: '24px', borderRadius: '16px', width: '100%', maxWidth: '340px', border: '1px solid #333', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', textAlign: 'center' }}>
+            <h3 style={{ color: 'white', marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Ir a Descarga</h3>
+            <p style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '20px', lineHeight: 1.5 }}>
+              Selecciona el botadero o estación autorizada a la que te diriges para descargar el camión:
+            </p>
+            <select
+              value={botaderoSeleccionado}
+              onChange={e => setBotaderoSeleccionado(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '10px', border: '1px solid #333', background: '#222', color: 'white', marginBottom: '24px', fontSize: '14px' }}
+            >
+              <option value="">-- Seleccionar botadero --</option>
+              {puntosDescarga.map(p => (
+                <option key={p.id} value={p.id}>{p.nombre} ({p.tipo === 'relleno' ? 'Relleno' : 'Estación'})</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => { setMostrarModalDescarga(false); setBotaderoSeleccionado(''); }}
+                style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid #333', color: 'white', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!botaderoSeleccionado}
+                onClick={confirmarIniciarDescarga}
+                style={{ flex: 1, padding: '12px', background: s.amber, border: 'none', color: '#000', borderRadius: '10px', cursor: botaderoSeleccionado ? 'pointer' : 'not-allowed', fontWeight: 700, opacity: botaderoSeleccionado ? 1 : 0.5 }}
+              >
+                Iniciar Pausa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Completar Descarga (Retorno) */}
+      {mostrarModalCompletarDescarga && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+          <div style={{ background: '#111', padding: '24px', borderRadius: '16px', width: '100%', maxWidth: '340px', border: '1px solid #333', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', textAlign: 'center' }}>
+            <h3 style={{ color: 'white', marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Regresar de Descarga</h3>
+            <p style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '20px', lineHeight: 1.5 }}>
+              Por favor, ingresa el tonelaje descargado en el botadero para completar el registro de descarga:
+            </p>
+            <div style={{ textAlign: 'left', marginBottom: '24px' }}>
+              <label style={{ display: 'block', color: '#fff', fontSize: '11px', marginBottom: '8px', fontWeight: 600 }}>TONELADAS DESCARGADAS</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Ej: 2.35"
+                value={toneladasDescarga}
+                onChange={e => setToneladasDescarga(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', background: '#000', border: '1px solid #333', borderRadius: '10px', padding: '12px', color: '#fff', fontSize: '15px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => { setMostrarModalCompletarDescarga(false); setToneladasDescarga(''); }}
+                style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid #333', color: 'white', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!toneladasDescarga}
+                onClick={confirmarCompletarDescarga}
+                style={{ flex: 1, padding: '12px', background: s.green, border: 'none', color: '#000', borderRadius: '10px', cursor: toneladasDescarga ? 'pointer' : 'not-allowed', fontWeight: 700 }}
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}
