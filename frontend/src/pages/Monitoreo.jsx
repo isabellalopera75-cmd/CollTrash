@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, Component } from 'react';
 import { MapContainer, TileLayer, Marker, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -6,7 +6,33 @@ import AdminLayout from '../components/Layout/AdminLayout';
 import { io } from 'socket.io-client';
 import API from '../services/api';
 
-export default function Monitoreo() {
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '40px', background: 'black', color: 'white', minHeight: '100vh' }}>
+          <h2>Algo salió mal en Monitoreo.jsx.</h2>
+          <pre style={{ color: 'red', whiteSpace: 'pre-wrap' }}>{this.state.error && this.state.error.toString()}</pre>
+          <pre style={{ color: 'yellow', whiteSpace: 'pre-wrap' }}>{this.state.errorInfo && this.state.errorInfo.componentStack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function MonitoreoContent() {
   const socketRef = useRef(null);
   const [vehiculos, setVehiculos] = useState([]);
   const [incidencias, setIncidencias] = useState([]);
@@ -80,6 +106,16 @@ export default function Monitoreo() {
   useEffect(() => {
     fetchIncidencias();
 
+    // Auto-open modal if navigated from Toast
+    const params = new URLSearchParams(window.location.search);
+    const incidencia_id = params.get('incidencia_id');
+    
+    if (incidencia_id) {
+      // Usamos setTimeout para asegurar que las incidencias ya se cargaron del API,
+      // O lo hacemos dentro del then de fetchIncidencias.
+      // Mejor lo manejamos en otro useEffect que observe `incidencias`.
+    }
+
     const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
     const token = localStorage.getItem('token');
     socketRef.current = io(socketUrl, {
@@ -114,10 +150,21 @@ export default function Monitoreo() {
       localStorage.setItem('colltrash_incidencias_descartadas', JSON.stringify(descartadas.filter(id => id !== incidencia_id)));
     });
 
-    return () => {
-      if (socketRef.current) socketRef.current.disconnect();
-    };
+    return () => socketRef.current.disconnect();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const incidencia_id = params.get('incidencia_id');
+    
+    if (incidencia_id && incidencias.length > 0) {
+      const found = incidencias.find(i => i.id.toString() === incidencia_id);
+      if (found) {
+        handleAbrirModalResolucion(found);
+        window.history.replaceState(null, '', '/monitoreo');
+      }
+    }
+  }, [incidencias]);
 
   const getStatusColor = (status) => {
     if (status === 'en_ruta') return 'var(--color-primary)';
@@ -156,7 +203,7 @@ export default function Monitoreo() {
              </div>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {vehiculos.map((v) => (
               <div key={v.id} className="list-item" style={{ padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -193,7 +240,7 @@ export default function Monitoreo() {
 
         {/* Map Pane */}
         <div style={{ flex: 1, position: 'relative' }}>
-          <MapContainer center={[2.9273, -75.2819]} zoom={13} style={{ height: '100%', width: '100%' }}>
+          <MapContainer center={[2.9273, -75.2819]} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
             {vehiculos.map(v => (
               <CircleMarker 
@@ -225,10 +272,6 @@ export default function Monitoreo() {
           </div>
 
           <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
-             <div className="card" style={{ padding: '8px 16px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--color-primary)', fontSize: '10px', fontWeight: 600, pointerEvents: 'auto' }}>
-                📡 Actualiza cada 30s
-             </div>
-
              {/* PANEL FLOTANTE DE INCIDENCIAS */}
              <div style={{
                display: 'flex', flexDirection: 'column', gap: '12px',
@@ -277,7 +320,7 @@ export default function Monitoreo() {
                  );
                })}
              </div>
-          </div>
+           </div>
 
           <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 1000 }}>
              <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
@@ -377,5 +420,13 @@ export default function Monitoreo() {
         </div>
       )}
     </AdminLayout>
+  );
+}
+
+export default function Monitoreo() {
+  return (
+    <ErrorBoundary>
+      <MonitoreoContent />
+    </ErrorBoundary>
   );
 }

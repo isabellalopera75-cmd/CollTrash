@@ -3,13 +3,14 @@ import AdminLayout from '../components/Layout/AdminLayout';
 import { obtenerReporteEficiencia } from '../services/api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getFechaColombia } from '../utils/dateUtils';
 
 export default function ReportesOperativos() {
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtros, setFiltros] = useState({
-    inicio: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0],
-    fin: new Date().toISOString().split('T')[0]
+    inicio: getFechaColombia(-7),
+    fin: getFechaColombia()
   });
 
   useEffect(() => {

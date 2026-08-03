@@ -316,7 +316,7 @@ body {
 /* MASTER-DETAIL LAYOUT */
 .split-view {
   display: flex;
-  height: calc(100vh - 112px);
+  height: calc(100vh - 180px);
   gap: 0;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);

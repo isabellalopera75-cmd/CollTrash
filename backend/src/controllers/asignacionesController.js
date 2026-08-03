@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { getFechaColombia } = require('../utils/dateUtils');
 
 const obtenerAsignacionesPorFecha = async (req, res) => {
   const { fecha } = req.query; // Espera YYYY-MM-DD
@@ -78,7 +79,7 @@ const reasignarAsignacion = async (req, res) => {
     }
 
     // REGLA: Bloquear reasignación si la jornada ya terminó
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = getFechaColombia();
     const fechaAsig = new Date(fecha).toISOString().split('T')[0];
     if (fechaAsig === hoy && hora_limite_fin) {
       const [hf, mf] = hora_limite_fin.split(':');

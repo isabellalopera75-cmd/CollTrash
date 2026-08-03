@@ -18,6 +18,24 @@ const obtenerNotificaciones = async (req, res) => {
   }
 };
 
+const obtenerTodasNotificaciones = async (req, res) => {
+  try {
+    const { id, rol } = req.usuario;
+    const filtro = rol === 'administrador'
+      ? 'WHERE usuario_id IS NULL OR usuario_id = $1'
+      : 'WHERE usuario_id = $1';
+
+    const resultado = await pool.query(
+      `SELECT * FROM notificaciones ${filtro} ORDER BY fecha DESC LIMIT 500`,
+      [id]
+    );
+    res.json({ notificaciones: resultado.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: 'Error al obtener el historial de notificaciones' });
+  }
+};
+
 const marcarLeida = async (req, res) => {
   const { id } = req.params;
   try {
@@ -51,6 +69,7 @@ const marcarTodasLeidas = async (req, res) => {
 
 module.exports = {
   obtenerNotificaciones,
+  obtenerTodasNotificaciones,
   marcarLeida,
   marcarTodasLeidas
 };

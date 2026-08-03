@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { getFechaColombia } = require('../utils/dateUtils');
 
 const dashboardDiario = async (req, res) => {
   try {
@@ -139,8 +140,8 @@ const reporteEficiencia = async (req, res) => {
     `;
     
     const resultado = await pool.query(query, [
-      inicio || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
-      fin || new Date().toISOString().split('T')[0]
+      inicio || getFechaColombia(-30),
+      fin || getFechaColombia()
     ]);
 
     res.status(200).json({ reportes: resultado.rows });

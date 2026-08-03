@@ -59,50 +59,57 @@ const crearRutaFija = async (req, res) => {
     // NUEVA VALIDACIÓN: REGLA DE ORO (No repetir jornada/día para Conductor o Vehículo)
     const diasNuevos = dias_semana.split(',').map(Number);
 
-    const rutasExistentes = await pool.query(
-      `SELECT nombre, dias_semana_arr, conductor_default_id, vehiculo_id
-       FROM rutas_fijas 
-       WHERE (conductor_default_id = $1 OR vehiculo_id = $2)
-       AND jornada_id = $3
-       AND activo = TRUE`,
-      [conductor_default_id, vehiculo_id, jornada_id]
-    );
+    let rutaFija;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE');
 
-    for (const ruta of rutasExistentes.rows) {
-      const diasOcupados = ruta.dias_semana_arr || [];
-      const coincidencia = diasNuevos.filter(diaN => 
-        diasOcupados.some(diaO => diaN === diaO)
+      const rutasExistentes = await client.query(
+        `SELECT nombre, dias_semana_arr, conductor_default_id, vehiculo_id
+         FROM rutas_fijas 
+         WHERE (conductor_default_id = $1 OR vehiculo_id = $2)
+         AND jornada_id = $3
+         AND activo = TRUE`,
+        [conductor_default_id, vehiculo_id, jornada_id]
       );
 
-      if (coincidencia.length > 0) {
-        const esConductor = ruta.conductor_default_id == conductor_default_id;
-        const sujeto = esConductor ? `El conductor` : `El vehículo`;
-        const razon = esConductor ? `ya tiene asignada la ruta "${ruta.nombre}"` : `ya está siendo usado en la ruta "${ruta.nombre}"`;
-        
-        return res.status(400).json({ 
-          mensaje: `❌ Error de Logística: ${sujeto} ${razon} para los días: [${coincidencia.join(', ')}] en la jornada seleccionada.` 
-        });
+      for (const ruta of rutasExistentes.rows) {
+        const diasOcupados = ruta.dias_semana_arr || [];
+        const coincidencia = diasNuevos.filter(diaN => 
+          diasOcupados.some(diaO => diaN === diaO)
+        );
+
+        if (coincidencia.length > 0) {
+          await client.query('ROLLBACK');
+          client.release();
+          const esConductor = ruta.conductor_default_id == conductor_default_id;
+          const sujeto = esConductor ? `El conductor` : `El vehículo`;
+          const razon = esConductor ? `ya tiene asignada la ruta "${ruta.nombre}"` : `ya está siendo usado en la ruta "${ruta.nombre}"`;
+          
+          return res.status(400).json({ 
+            mensaje: `❌ Error de Logística: ${sujeto} ${razon} para los días: [${coincidencia.join(', ')}] en la jornada seleccionada.` 
+          });
+        }
       }
-    }
 
-    // Guardar la ruta principal
-    const diasArray = dias_semana
-      .split(',')
-      .map(d => parseInt(d.trim()))
-      .filter(d => !isNaN(d));
+      // Guardar la ruta principal
+      const diasArray = dias_semana
+        .split(',')
+        .map(d => parseInt(d.trim()))
+        .filter(d => !isNaN(d));
 
-    const resultado = await pool.query(
-      `INSERT INTO rutas_fijas (nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana_arr)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [nombre, jornada_id, conductor_default_id, vehiculo_id, diasArray]
-    );
+      const resultado = await client.query(
+        `INSERT INTO rutas_fijas (nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana_arr)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [nombre, jornada_id, conductor_default_id, vehiculo_id, diasArray]
+      );
 
-    const rutaFija = resultado.rows[0];
+    rutaFija = resultado.rows[0];
 
     // Crear sectores si vienen en la petición
     if (sectores && sectores.length > 0) {
       for (const sector of sectores) {
-        await pool.query(
+        await client.query(
           `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_requerido)
            VALUES ($1, $2, $3, $4, $5)`,
           [
@@ -114,6 +121,15 @@ const crearRutaFija = async (req, res) => {
           ]
         );
       }
+    }
+
+    await client.query('COMMIT');
+    client.release();
+
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      client.release();
+      throw txError;
     }
 
     // Generar asignaciones inmediatamente para que aparezcan en el panel semanal
@@ -142,20 +158,38 @@ const crearRutaFija = async (req, res) => {
 // Obtener todas las rutas fijas
 const obtenerRutasFijas = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = (page - 1) * limit;
+
+    const totalRes = await pool.query('SELECT COUNT(*) FROM rutas_fijas');
+    const totalRegistros = parseInt(totalRes.rows[0].count);
+    const totalPaginas = Math.ceil(totalRegistros / limit);
+
     const resultado = await pool.query(
       `SELECT r.*, j.nombre as jornada_nombre, u.nombre as conductor_nombre, v.placa as vehiculo_placa
        FROM rutas_fijas r
        JOIN jornadas j ON r.jornada_id = j.id
        LEFT JOIN usuarios u ON r.conductor_default_id = u.id
        LEFT JOIN vehiculos v ON r.vehiculo_id = v.id
-       ORDER BY r.id ASC`
+       ORDER BY r.id ASC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
     const { arrayToString } = require('../utils/dateHelper');
     const rutas = resultado.rows.map(r => ({
       ...r,
       dias_semana: arrayToString(r.dias_semana_arr || [])
     }));
-    res.status(200).json({ rutas });
+    res.status(200).json({ 
+      rutas,
+      paginacion: {
+        totalRegistros,
+        totalPaginas,
+        paginaActual: page,
+        limite: limit
+      }
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ mensaje: 'Error al obtener rutas fijas' });

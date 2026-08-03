@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
+const { getFechaColombia } = require('../utils/dateUtils');
 const {
   iniciarRuta, actualizarSector,
   registrarDescarga, completarDescarga, obtenerDescarga,
@@ -12,7 +13,7 @@ const { verificarToken, soloConductor } = require('../middlewares/authMiddleware
 // Obtiene la asignación del día para el conductor (Usada por ConductorPanel.jsx)
 router.get('/mi-asignacion', verificarToken, async (req, res) => {
   const conductorId = req.usuario.id;
-  const fecha = req.query.fecha || new Date().toISOString().split('T')[0];
+  const fecha = req.query.fecha || getFechaColombia();
   try {
     const r = await pool.query(
       `SELECT a.id,

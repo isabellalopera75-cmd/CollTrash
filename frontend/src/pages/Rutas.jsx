@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import API, { obtenerAsignaciones, reasignarAsignacion, obtenerConductores, obtenerVehiculos, habilitarInicioTardio } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
+import { getFechaColombia } from '../utils/dateUtils';
 
 export default function Rutas() {
   const [asignaciones, setAsignaciones] = useState([]);
   const [conteos, setConteos] = useState({});
-  const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(getFechaColombia());
   const [cargando, setCargando] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -20,7 +21,7 @@ export default function Rutas() {
     enCurso: asignaciones.filter(a => a.estado === 'activa').length,
     pendientes: asignaciones.filter(a => a.estado === 'pendiente').length,
     completadas: asignaciones.filter(a => a.estado === 'completada').length,
-    hoy: new Date().toISOString().split('T')[0]
+    hoy: getFechaColombia()
   };
 
   const [modalReactivar, setModalReactivar] = useState(false);

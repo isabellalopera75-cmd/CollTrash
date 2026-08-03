@@ -169,7 +169,7 @@ const startSimulation = async (asignacionId) => {
 
         // ── LÓGICA NUEVA: Pausa por Incidencias Críticas ───────────────────
         const activeIncident = await pool.query(
-          `SELECT id, tipo, latitud as lat, longitud as lng FROM incidencias_conductor
+          `SELECT id, tipo, lat, lng FROM incidencias_conductor
            WHERE asignacion_id = $1 AND resuelto = false 
            AND tipo IN ('accidente', 'falla_motor')
            LIMIT 1`,
@@ -241,7 +241,7 @@ const startSimulation = async (asignacionId) => {
           io.emit(`posicion_conductor_${asig.id}`, { 
             lat: currentPos[0], 
             lng: currentPos[1], 
-            progreso: Math.round(progress * 100),
+            progreso: Math.min(99, Math.floor(progress * 100)),
             km: totalDistancia.toFixed(2)
           });
         }

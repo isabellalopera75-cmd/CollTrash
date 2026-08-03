@@ -107,6 +107,15 @@ const iniciarRuta = async (req, res) => {
         [inicioTardio, justificacion || null, asigId]
       );
 
+      if (inicioTardio && justificacion) {
+        await client.query(
+          `INSERT INTO novedades_operativas (asignacion_id, admin_id, tipo_novedad, descripcion)
+           VALUES ($1, NULL, $2, $3)`,
+          [asigId, 'REPORTE_CONDUCTOR_TARDIO', justificacion]
+        );
+      }
+
+
       // Activar primer sector (si existe)
       await client.query(
         `UPDATE sectores_asignacion SET estado = 'en_progreso'

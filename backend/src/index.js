@@ -25,16 +25,22 @@ const auditoriaRoutes = require('./routes/auditoriaRoutes');
 const notificacionRoutes = require('./routes/notificacionRoutes');
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 iniciarSocket(server);
 
-app.use(cors({
+const corsOptions = {
   origin: function (origin, callback) {
-    // Permitir requests sin origin (ej. postman) o cualquier origin para desarrollo/ngrok
-    callback(null, true);
+    const allowed = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : [];
+    if (!origin || allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS'));
+    }
   },
   credentials: true
-}));
+};
+app.use(cors(corsOptions));
 app.use(helmet({ 
   contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" }

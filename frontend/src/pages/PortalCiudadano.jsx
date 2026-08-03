@@ -63,7 +63,7 @@ export default function PortalCiudadano() {
   useEffect(() => {
     // Set body background to match citizen app background for status bar blending
     const prevBg = document.body.style.backgroundColor;
-    document.body.style.backgroundColor = '#0A0D14';
+    document.body.style.backgroundColor = '#080c0a';
 
     const localZona = localStorage.getItem('pc_zona');
     const localBarrio = localStorage.getItem('pc_barrio');
@@ -140,12 +140,87 @@ export default function PortalCiudadano() {
 
   if (onboarding !== "done") {
     return (
-      <div className="pc-wrapper">
-        <div className="pc-container">
-          {onboarding === "auth" && <OnboardingAuth onNext={() => setOnboarding("ubicacion")} />}
-          {onboarding === "ubicacion" && <OnboardingUbicacion onNext={() => setOnboarding("confirmacion")} onManual={() => setOnboarding("manual")} setZona={(z) => {setZona(z); setBarrioReal("Barrio Centro");}} />}
-          {onboarding === "manual" && <OnboardingManual onNext={() => setOnboarding("confirmacion")} setZona={setZona} setBarrioReal={setBarrioReal} onBack={() => setOnboarding("ubicacion")} />}
-          {onboarding === "confirmacion" && <OnboardingConfirmacion zona={zona} barrioReal={barrioReal} onFinish={() => handleFinishOnboarding(zona, barrioReal)} />}
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#080c0a',
+        color: '#f0f0e8',
+        fontFamily: '"Inter", "Geist", sans-serif',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* TOPBAR UNIFICADA */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '24px 40px',
+          borderBottom: '1px solid rgba(255,255,255,0.05)'
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: '#5a5f5c' }}>
+            COLLTRASH // PORTAL CIUDADANO
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10px', fontWeight: 700, color: '#4a7c59', letterSpacing: '1px' }}>
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#4a7c59', animation: 'blink 1.5s infinite' }}></div>
+            EN LÍNEA
+          </div>
+        </div>
+
+        {/* CONTENEDOR 2 COLUMNAS */}
+        <div className="pc-onboarding-grid">
+          {/* PANEL IZQUIERDO */}
+          <div className="pc-left-panel">
+            <div className="pc-left-content">
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#4a7c59', letterSpacing: '3px', marginBottom: '40px' }}>
+                GESTIÓN DE RESIDUOS · NEIVA, COL.
+              </div>
+              <div style={{ lineHeight: 0.85, marginBottom: '24px' }}>
+                <div className="pc-hero-text" style={{ fontWeight: 900, color: '#fff', letterSpacing: '-0.05em' }}>COLL</div>
+                <div className="pc-hero-text" style={{ fontWeight: 900, color: 'transparent', WebkitTextStroke: '2px #fff', letterSpacing: '-0.05em' }}>TRASH</div>
+              </div>
+              <div className="pc-divider-line" style={{ width: '40px', height: '1px', backgroundColor: '#4a7c59', marginBottom: '24px' }}></div>
+              <p style={{ color: '#5a5f5c', fontSize: '13px', maxWidth: '320px', lineHeight: 1.5, marginBottom: '40px' }}>
+                Plataforma ciudadana para reportar incidentes y consultar el servicio de recolección.
+              </p>
+              <div className="pc-features-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {[
+                  "Reportar basureros clandestinos",
+                  "Consultar horario de recolección",
+                  "Reportar fallos en vehículos",
+                  "Reportar mala atención",
+                  "Consejos de reciclaje",
+                  "Seguimiento de tus reportes"
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#5a5f5c', fontSize: '12px', fontWeight: 500 }}>
+                    <div style={{ width: '16px', height: '1px', backgroundColor: '#4a7c59' }}></div>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* FOOTER IZQUIERDO */}
+            <div className="pc-left-footer" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', color: '#2a2f2c', fontSize: '10px', fontWeight: 700, letterSpacing: '2px' }}>
+              <div>EST. 2024</div>
+              <div>V 2.0</div>
+            </div>
+          </div>
+
+          {/* PANEL DERECHO */}
+          <div className="pc-right-panel">
+            <div style={{ width: '100%', maxWidth: '400px', margin: '0 auto' }}>
+              {onboarding === "auth" && <OnboardingAuth onNext={() => setOnboarding("ubicacion")} />}
+              {onboarding === "ubicacion" && <OnboardingUbicacion onNext={() => setOnboarding("confirmacion")} onManual={() => setOnboarding("manual")} setZona={(z) => {setZona(z); setBarrioReal("Barrio Centro");}} />}
+              {onboarding === "manual" && <OnboardingManual onNext={() => setOnboarding("confirmacion")} setZona={setZona} setBarrioReal={setBarrioReal} onBack={() => setOnboarding("ubicacion")} />}
+              {onboarding === "confirmacion" && <OnboardingConfirmacion zona={zona} barrioReal={barrioReal} onFinish={() => handleFinishOnboarding(zona, barrioReal)} />}
+            </div>
+            {/* ETIQUETA VERTICAL GRS */}
+            <div style={{
+              position: 'absolute', bottom: '40px', right: '10px', transform: 'rotate(-90deg)', transformOrigin: 'right bottom',
+              fontSize: '10px', color: '#2a2f2c', fontWeight: 700, letterSpacing: '3px'
+            }}>
+              GRS — V2.4.1 — 2026
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -157,9 +232,9 @@ export default function PortalCiudadano() {
   return (
     <div className="pc-wrapper">
       <div className="pc-container">
-        <div style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) 16px 16px 16px', borderBottom: '1px solid #1F242F', backgroundColor: '#0A0D14', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) 16px 16px 16px', borderBottom: '1px solid var(--pc-border)', backgroundColor: 'var(--pc-bg-background)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'rgba(0, 255, 157, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00FF9D' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'rgba(74, 124, 89, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a7c59' }}>
               <Home size={20} />
             </div>
             <div>
@@ -269,7 +344,6 @@ function OnboardingAuth({ onNext }) {
         } catch (err) {
           const mensaje = err.response?.data?.mensaje || '';
           if (mensaje.toLowerCase().includes('ya está registrado como ciudadano') || mensaje.toLowerCase().includes('ya está registrado')) {
-            // Ya existe → redirigir a login
             setTabMode('login');
             setErrorMsg('Ya tienes una cuenta con este correo. Inicia sesión.');
           } else {
@@ -283,93 +357,157 @@ function OnboardingAuth({ onNext }) {
   };
 
   return (
-      <div className="pc-centered" style={{ padding: '24px 16px' }}>
-
-        <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: 'rgba(0, 255, 157, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: '#00FF9D' }}>
-          <User size={28} />
-        </div>
+      <div style={{ width: '100%' }}>
         
         {/* Toggle between Register and Login */}
-        <div style={{ display: 'flex', gap: '8px', width: '100%', marginBottom: '20px', padding: '4px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid var(--pc-border)' }}>
+        <div style={{ display: 'flex', gap: '20px', marginBottom: '40px' }}>
           <button 
             type="button" 
-            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: tabMode === 'register' ? 'var(--pc-primary)' : 'transparent', color: tabMode === 'register' ? '#000' : '#8C95A6', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}
-            onClick={() => { setTabMode('register'); setErrorMsg(''); }}
+            style={{
+              background: 'none', border: 'none', padding: '0 0 6px 0',
+              color: tabMode === 'login' ? '#fff' : '#5a5f5c',
+              fontSize: '10px', fontWeight: 700, letterSpacing: '2px',
+              cursor: 'pointer',
+              borderBottom: `2px solid ${tabMode === 'login' ? '#4a7c59' : 'transparent'}`,
+              transition: 'all 0.3s'
+            }}
+            onClick={() => { setTabMode('login'); setErrorMsg(''); }}
           >
-            Registrarse
+            INICIAR SESIÓN
           </button>
           <button 
             type="button" 
-            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: tabMode === 'login' ? 'var(--pc-primary)' : 'transparent', color: tabMode === 'login' ? '#000' : '#8C95A6', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}
-            onClick={() => { setTabMode('login'); setErrorMsg(''); }}
+            style={{
+              background: 'none', border: 'none', padding: '0 0 6px 0',
+              color: tabMode === 'register' ? '#fff' : '#5a5f5c',
+              fontSize: '10px', fontWeight: 700, letterSpacing: '2px',
+              cursor: 'pointer',
+              borderBottom: `2px solid ${tabMode === 'register' ? '#4a7c59' : 'transparent'}`,
+              transition: 'all 0.3s'
+            }}
+            onClick={() => { setTabMode('register'); setErrorMsg(''); }}
           >
-            Iniciar Sesión
+            REGISTRARSE
           </button>
         </div>
 
-        <h1 className="pc-title" style={{ fontSize: '22px', marginBottom: '8px' }}>
-          {tabMode === 'register' ? 'Registro por Correo' : 'Iniciar Sesión'}
-        </h1>
-        <p className="pc-subtitle" style={{ marginBottom: '20px', fontSize: '13px' }}>
-          {tabMode === 'register' ? 'Ingresa tus datos para habilitar tus reportes ciudadanos.' : 'Ingresa tus credenciales para acceder a tu portal.'}
-        </p>
+        <div style={{ marginBottom: '40px' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+            {tabMode === 'register' ? 'Crea tu cuenta.' : 'Bienvenido de vuelta.'}
+          </h1>
+          <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+            {tabMode === 'register' ? 'Regístrate para reportar incidentes de recolección en tu sector.' : 'Accede para reportar incidentes y consultar el estado de tus solicitudes.'}
+          </p>
+        </div>
 
-        <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+          
           {tabMode === "register" && (
-            <div style={{ textAlign: 'left' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#8C95A6', marginBottom: '6px' }}>NOMBRE O APODO (OPCIONAL)</label>
-              <input 
-                type="text" 
-                className="pc-input" 
-                placeholder="Ej: Carlos" 
-                value={nombre} 
-                onChange={e => setNombre(e.target.value)} 
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '30px' }}>
+              <div style={{ position: 'relative' }}>
+                <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>NOMBRE COMPLETO</label>
+                <input 
+                  type="text" 
+                  className="transparent-input" 
+                  placeholder="Ana García López" 
+                  value={nombre} 
+                  onChange={e => setNombre(e.target.value)} 
+                  style={{
+                    width: '100%', background: 'transparent', border: 'none',
+                    borderBottom: '1px solid #4a7c59',
+                    color: '#fff', fontSize: '15px', padding: '8px 0', outline: 'none',
+                    caretColor: '#4a7c59', transition: 'border-color 0.3s'
+                  }}
+                  onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'}
+                  onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'}
+                />
+              </div>
             </div>
           )}
 
-          <div style={{ textAlign: 'left' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#8C95A6', marginBottom: '6px' }}>CORREO ELECTRÓNICO *</label>
+          <div style={{ position: 'relative' }}>
+            <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTRÓNICO</label>
             <input 
-              type="email" 
-              required 
-              className="pc-input" 
-              placeholder="ciudadano@ejemplo.com" 
+              type="email" required 
+              className="transparent-input" 
+              placeholder="ciudadano@correo.com" 
               value={email} 
               onChange={e => setEmail(e.target.value)} 
-              style={{ width: '100%', boxSizing: 'border-box' }}
+              style={{
+                width: '100%', background: 'transparent', border: 'none',
+                borderBottom: '1px solid #4a7c59',
+                color: '#fff', fontSize: '15px', padding: '8px 0', outline: 'none',
+                caretColor: '#4a7c59', transition: 'border-color 0.3s'
+              }}
+              onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'}
+              onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'}
             />
           </div>
 
-          <div style={{ textAlign: 'left' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#8C95A6', marginBottom: '6px' }}>CONTRASEÑA *</label>
-            <input 
-              type="password" 
-              required 
-              className="pc-input" 
-              placeholder="••••••••" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              style={{ width: '100%', boxSizing: 'border-box' }}
-            />
-          </div>
-
-          {errorMsg && (
-            <div style={{ padding: '10px 12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: 'var(--pc-status-danger)', fontSize: '12px', fontWeight: 500, textAlign: 'center' }}>
-              ⚠️ {errorMsg}
+          {tabMode === "register" ? (
+            <div style={{ position: 'relative' }}>
+              <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
+              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="transparent-input" placeholder="••••••••" style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #4a7c59', color: '#fff', fontSize: '15px', padding: '8px 30px 8px 0', outline: 'none', caretColor: '#4a7c59', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'} onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'} />
+              <i className="bi bi-eye" style={{ position: 'absolute', right: 0, bottom: '8px', color: '#5a5f5c' }}></i>
+            </div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
+              <input 
+                type="password" required 
+                className="transparent-input" 
+                placeholder="••••••••" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                style={{
+                  width: '100%', background: 'transparent', border: 'none',
+                  borderBottom: '1px solid #4a7c59',
+                  color: '#fff', fontSize: '15px', padding: '8px 30px 8px 0', outline: 'none',
+                  caretColor: '#4a7c59', transition: 'border-color 0.3s'
+                }}
+                onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'}
+                onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'}
+              />
+              <i className="bi bi-eye" style={{ position: 'absolute', right: 0, bottom: '8px', color: '#5a5f5c', cursor: 'pointer' }}></i>
+              <div style={{ position: 'absolute', right: 0, top: '-18px', fontSize: '10px', color: '#5a5f5c', cursor: 'pointer' }}>¿Olvidaste?</div>
             </div>
           )}
 
-          <button 
-            type="submit" 
-            disabled={loading || !email.trim() || !password.trim()}
-            className="pc-btn-primary" 
-            style={{ marginTop: '12px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-          >
-            {loading ? <Loader2 className="animate-spin-custom" size={20} /> : null}
-            {loading ? (tabMode === "register" ? "Registrando cuenta..." : "Iniciando sesión...") : (tabMode === "register" ? "Continuar al siguiente paso" : "Iniciar sesión y continuar")}
-          </button>
+          {errorMsg && (
+            <div style={{ color: '#ef4444', fontSize: '12px', letterSpacing: '0.5px' }}>
+              {errorMsg}
+            </div>
+          )}
+
+          <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button 
+              type="submit" 
+              disabled={loading || !email.trim() || !password.trim()}
+              style={{
+                background: 'none', border: 'none', display: 'flex', alignItems: 'center',
+                gap: '16px', cursor: (loading || !email.trim() || !password.trim()) ? 'not-allowed' : 'pointer', padding: 0,
+                opacity: (loading || !email.trim() || !password.trim()) ? 0.5 : 1
+              }}
+            >
+              <div style={{
+                width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+                transition: 'transform 0.2s', transform: loading ? 'scale(0.9)' : 'scale(1)'
+              }}>
+                {loading ? <Loader2 className="animate-spin-custom" size={20} /> : <i className="bi bi-arrow-right"></i>}
+              </div>
+              <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+                {tabMode === "register" ? "CREAR CUENTA" : "INGRESAR"}
+              </span>
+            </button>
+            
+            <div 
+              style={{ fontSize: '11px', color: '#5a5f5c', cursor: 'pointer' }}
+              onClick={() => setTabMode(tabMode === 'register' ? 'login' : 'register')}
+            >
+              {tabMode === "register" ? "Ya tengo cuenta →" : "No tengo cuenta →"}
+            </div>
+          </div>
         </form>
 
         <p style={{ fontSize: '11px', color: '#8C95A6', marginTop: '24px', textAlign: 'center' }}>
@@ -389,39 +527,62 @@ function OnboardingUbicacion({ onNext, onManual, setZona }) {
     }, 2000);
   };
   return (
-    <div className="pc-centered">
-      <div style={{ position: 'relative', width: '96px', height: '96px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', backgroundColor: 'rgba(0,255,157,0.1)', opacity: 0.3 }} className="animate-ping-custom"></div>
-        <div style={{ position: 'absolute', inset: '16px', borderRadius: '50%', backgroundColor: 'rgba(0,255,157,0.15)' }}></div>
-        <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(0,255,157,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--pc-primary)' }}>
-          <Navigation size={32} />
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ marginBottom: '40px' }}>
+        <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'transparent', border: '1px solid #4a7c59', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a7c59', marginBottom: '24px' }}>
+          <Navigation size={20} strokeWidth={2} style={{ transform: 'rotate(45deg) translate(-2px, 2px)' }} />
         </div>
+        
+        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+          Permite tu ubicación.
+        </h1>
+        <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+          Necesitamos tu ubicación para mostrarte los horarios y rutas de tu zona.
+        </p>
       </div>
-      <h1 className="pc-title">Permite tu ubicación</h1>
-      <p className="pc-subtitle">Necesitamos tu ubicación para mostrarte los horarios de tu zona.</p>
       
-      <div className="pc-card pc-mb-4" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '40px' }}>
         {[
-          { i: <Clock size={16}/>, t: "Horarios exactos de tu barrio" },
-          { i: <Bell size={16}/>, t: "Notificaciones previas" },
-          { i: <LocateFixed size={16}/>, t: "Seguimiento en tiempo real" }
+          { i: <Clock size={14}/>, t: "Horarios exactos de tu barrio" },
+          { i: <Bell size={14}/>, t: "Notificaciones previas" },
+          { i: <LocateFixed size={14}/>, t: "Seguimiento en tiempo real" }
         ].map((item, idx) => (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(0,255,157,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--pc-primary)' }}>
-              {item.i}
-            </div>
-            <span className="pc-text-xs pc-text-muted">{item.t}</span>
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '16px', color: '#5a5f5c', fontSize: '12px', fontWeight: 500 }}>
+             <div style={{ color: '#4a7c59' }}>{item.i}</div>
+             {item.t}
           </div>
         ))}
       </div>
       
-      <button className="pc-btn-primary pc-mb-4" onClick={handleDetect} disabled={loading}>
-        {loading ? <Loader2 className="animate-spin-custom" size={20} /> : <LocateFixed size={20} />}
-        {loading ? "Detectando tu zona..." : "Permitir ubicación"}
-      </button>
-      <button onClick={onManual} style={{ background: 'none', border: 'none', color: 'var(--pc-text-muted)', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}>
-        Ingresar barrio manualmente
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+        <button 
+          onClick={handleDetect} 
+          disabled={loading}
+          style={{
+            background: 'none', border: 'none', display: 'flex', alignItems: 'center',
+            gap: '16px', cursor: loading ? 'not-allowed' : 'pointer', padding: 0,
+            opacity: loading ? 0.5 : 1
+          }}
+        >
+          <div style={{
+            width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+            transition: 'transform 0.2s', transform: loading ? 'scale(0.9)' : 'scale(1)'
+          }}>
+            {loading ? <Loader2 className="animate-spin-custom" size={20} /> : <i className="bi bi-arrow-right"></i>}
+          </div>
+          <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+             {loading ? 'DETECTANDO...' : 'PERMITIR'}
+          </span>
+        </button>
+        
+        <div 
+          onClick={onManual} 
+          style={{ fontSize: '11px', color: '#5a5f5c', cursor: 'pointer' }}
+        >
+          Ingresar manual →
+        </div>
+      </div>
     </div>
   );
 }
@@ -454,44 +615,68 @@ function OnboardingManual({ onNext, onBack, setZona, setBarrioReal }) {
   };
   
   return (
-    <div className="pc-content" style={{ paddingTop: '64px' }}>
-      <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--pc-text-muted)', fontSize: '12px', cursor: 'pointer', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-        ← Volver
-      </button>
-      <h1 className="pc-title" style={{ textAlign: 'left' }}>Elige tu barrio</h1>
-      <p className="pc-subtitle" style={{ textAlign: 'left' }}>Busca tu zona para asignarte los horarios.</p>
-      
-      <div className="pc-input-wrapper">
-        <MapPin size={18} className="pc-input-icon" />
-        <input type="text" className="pc-input" placeholder="Buscar barrio..." value={query} onChange={(e) => setQuery(e.target.value)} />
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ marginBottom: '40px' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#5a5f5c', fontSize: '11px', cursor: 'pointer', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}>
+          ← Volver
+        </button>
+        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+          Elige tu barrio.
+        </h1>
+        <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+          Busca tu zona para asignarte los horarios.
+        </p>
       </div>
       
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+      <div style={{ position: 'relative', marginBottom: '40px' }}>
+        <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>BUSCAR BARRIO</label>
+        <MapPin size={16} style={{ position: 'absolute', left: 0, bottom: '10px', color: '#4a7c59' }} />
         <select 
-          className="pc-input" 
-          style={{ paddingLeft: '14px', cursor: 'pointer' }}
+          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #4a7c59', color: selected ? '#fff' : '#5a5f5c', fontSize: '15px', padding: '8px 0 8px 24px', outline: 'none', cursor: 'pointer', transition: 'border-color 0.3s', appearance: 'none' }}
           value={selected?.id || ""} 
           onChange={(e) => {
             const bId = parseInt(e.target.value);
             const b = barriosDb.find(barrio => barrio.id === bId);
             setSelected(b || null);
           }}
+          onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'} 
+          onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'} 
         >
-          <option value="" disabled>Selecciona un barrio...</option>
+          <option value="" disabled style={{ backgroundColor: '#080c0a' }}>Selecciona un barrio...</option>
           {barriosDb.map((b) => {
             if (query && !b.nombre.toLowerCase().includes(query.toLowerCase())) return null;
             return (
-              <option key={b.id} value={b.id}>
+              <option key={b.id} value={b.id} style={{ backgroundColor: '#080c0a', color: '#fff' }}>
                 {b.nombre} - Neiva
               </option>
             );
           })}
         </select>
+        <div style={{ position: 'absolute', right: 0, bottom: '10px', color: '#4a7c59', pointerEvents: 'none' }}>▼</div>
       </div>
       
-      <button className="pc-btn-primary" disabled={!selected} onClick={handleConfirm}>
-        Confirmar barrio
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+        <button 
+          disabled={!selected} 
+          onClick={handleConfirm}
+          style={{
+            background: 'none', border: 'none', display: 'flex', alignItems: 'center',
+            gap: '16px', cursor: !selected ? 'not-allowed' : 'pointer', padding: 0,
+            opacity: !selected ? 0.5 : 1
+          }}
+        >
+          <div style={{
+            width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+            transition: 'transform 0.2s'
+          }}>
+            <i className="bi bi-arrow-right"></i>
+          </div>
+          <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+            CONFIRMAR BARRIO
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -499,39 +684,69 @@ function OnboardingManual({ onNext, onBack, setZona, setBarrioReal }) {
 function OnboardingConfirmacion({ zona, barrioReal, onFinish }) {
   const barrio = barriosPorZona[zona];
   return (
-    <div className="pc-centered">
-      <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(0, 255, 157, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--pc-primary)' }}>
-        <CheckCircle2 size={32} />
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ marginBottom: '40px' }}>
+        <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'transparent', border: '1px solid #4a7c59', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a7c59', marginBottom: '24px' }}>
+          <CheckCircle2 size={20} strokeWidth={2} />
+        </div>
+        
+        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+          ¡Todo listo!
+        </h1>
+        <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+          Tu zona ha sido configurada correctamente.
+        </p>
       </div>
-      <h1 className="pc-title">¡Todo listo!</h1>
-      <p className="pc-subtitle">Tu zona ha sido configurada correctamente.</p>
       
-      <div className="pc-card pc-mb-4">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ color: 'var(--pc-primary)' }}><MapPin size={24} /></div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '40px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+          <div style={{ color: '#4a7c59', marginTop: '2px' }}><MapPin size={18} /></div>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700 }}>{barrioReal}</div>
-            <div style={{ fontSize: '12px', color: 'var(--pc-text-muted)' }}>{barrio.sector}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>{barrioReal}</div>
+            <div style={{ fontSize: '12px', color: '#5a5f5c' }}>{barrio.sector}</div>
           </div>
         </div>
-        <div style={{ height: '1px', backgroundColor: 'var(--pc-border)', marginBottom: '16px' }}></div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        
+        <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {barrio.horarios.slice(0,3).map(h => (
             <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {h.tipo === 'Reciclaje' ? <Recycle size={14} color="var(--pc-primary)" /> : <Truck size={14} color="var(--pc-text-muted)" />}
-                <span style={{ fontSize: '13px', fontWeight: 600 }}>{h.dia}</span>
-                <span className="pc-badge" style={{ backgroundColor: 'var(--pc-bg-background)', color: 'var(--pc-text-muted)' }}>{h.tipo}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ color: h.tipo === 'Reciclaje' ? '#4a7c59' : '#5a5f5c' }}>
+                  {h.tipo === 'Reciclaje' ? <Recycle size={14} /> : <Truck size={14} />}
+                </div>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{h.dia}</span>
+                <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', padding: '2px 6px', border: `1px solid ${h.tipo === 'Reciclaje' ? '#4a7c59' : '#5a5f5c'}`, borderRadius: '4px', color: h.tipo === 'Reciclaje' ? '#4a7c59' : '#5a5f5c' }}>
+                  {h.tipo.toUpperCase()}
+                </span>
               </div>
-              <span style={{ fontSize: '13px', color: 'var(--pc-text-muted)' }}>{h.hora}</span>
+              <span style={{ fontSize: '12px', color: '#5a5f5c', fontWeight: 500 }}>{h.hora}</span>
             </div>
           ))}
         </div>
       </div>
       
-      <button className="pc-btn-primary" onClick={onFinish}>
-        Entrar a la app <ChevronRight size={20} />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+        <button 
+          onClick={onFinish}
+          style={{
+            background: 'none', border: 'none', display: 'flex', alignItems: 'center',
+            gap: '16px', cursor: 'pointer', padding: 0
+          }}
+        >
+          <div style={{
+            width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+            transition: 'transform 0.2s'
+          }}>
+            <ChevronRight size={20} strokeWidth={3} />
+          </div>
+          <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+            ENTRAR A LA APP
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -543,7 +758,7 @@ function TabInicio({ barrio, onChangeTab }) {
   return (
     <div className="pc-content">
       {/* Hero */}
-      <div style={{ backgroundColor: 'rgba(0, 255, 157, 0.05)', border: '1px solid rgba(0, 255, 157, 0.2)', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
+      <div style={{ backgroundColor: 'rgba(74, 124, 89, 0.05)', border: '1px solid rgba(74, 124, 89, 0.2)', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--pc-primary)' }}>
           <Truck size={18} />
           <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>PRÓXIMA RECOLECCIÓN</span>
@@ -556,7 +771,7 @@ function TabInicio({ barrio, onChangeTab }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
             {prox.activo ? (
-              <div className="pc-badge pc-badge-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(0, 255, 157, 0.15)', padding: '6px 12px', borderRadius: '16px' }}>
+              <div className="pc-badge pc-badge-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(74, 124, 89, 0.15)', padding: '6px 12px', borderRadius: '16px' }}>
                 <div className="animate-ping-custom" style={{ width: '6px', height: '6px', backgroundColor: 'var(--pc-primary)', borderRadius: '50%' }}></div>
                 En camino
               </div>
@@ -627,7 +842,7 @@ function TabHorarios({ barrio }) {
       <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '16px' }}>Próximas recolecciones</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
         {barrio.horarios.map(h => (
-          <div key={h.id} className="pc-card pc-card-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: h.activo ? 'rgba(0, 255, 157, 0.05)' : 'var(--pc-bg-card)', borderColor: h.activo ? 'rgba(0, 255, 157, 0.3)' : 'var(--pc-border)' }}>
+          <div key={h.id} className="pc-card pc-card-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: h.activo ? 'rgba(74, 124, 89, 0.05)' : 'var(--pc-bg-card)', borderColor: h.activo ? 'rgba(74, 124, 89, 0.3)' : 'var(--pc-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: h.activo ? 'rgba(0,255,157,0.2)' : 'var(--pc-bg-background)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: h.activo ? 'var(--pc-primary)' : 'var(--pc-text-muted)' }}>
                 {h.tipo === 'Reciclaje' ? <Recycle size={18} /> : <Truck size={18} />}
@@ -667,7 +882,7 @@ function TabHorarios({ barrio }) {
             let fw = 400;
 
             if (isHoy) { bg = 'var(--pc-primary)'; col = '#fff'; opacity = 1; fw = 700; }
-            else if (isReci) { bg = 'rgba(0, 255, 157, 0.15)'; col = 'var(--pc-primary)'; opacity = 1; fw = 600; }
+            else if (isReci) { bg = 'rgba(74, 124, 89, 0.15)'; col = 'var(--pc-primary)'; opacity = 1; fw = 600; }
             else if (isOrd) { bg = 'var(--pc-bg-secondary)'; col = 'var(--pc-text-foreground)'; opacity = 1; fw = 600; }
 
             return (
@@ -683,7 +898,7 @@ function TabHorarios({ barrio }) {
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--pc-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--pc-bg-secondary)' }}></div> Ordinarios</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'rgba(0, 255, 157, 0.15)' }}></div> Reciclaje</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'rgba(74, 124, 89, 0.15)' }}></div> Reciclaje</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--pc-primary)' }}></div> Hoy</div>
         </div>
       </div>
@@ -792,7 +1007,7 @@ function TabReportar({ onEnviado, barrioReal }) {
   if (step === "success") {
     return (
       <div className="pc-centered">
-        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(0, 255, 157, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--pc-primary)' }}>
+        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(74, 124, 89, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--pc-primary)' }}>
           <CheckCircle2 size={32} />
         </div>
         <h1 className="pc-title">Reporte enviado</h1>
@@ -991,8 +1206,8 @@ function TabMisReportes({ reportes }) {
               </div>
 
               {r.justificacion_rechazo && (
-                <div style={{ marginTop: '4px', padding: '10px 12px', backgroundColor: r.estado === 'rechazado' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0, 255, 157, 0.1)', border: r.estado === 'rechazado' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(0, 255, 157, 0.3)', borderRadius: '10px', fontSize: '12px', lineHeight: 1.4 }}>
-                  <strong style={{ color: r.estado === 'rechazado' ? '#EF4444' : '#00FF9D', display: 'block', marginBottom: '2px' }}>
+                <div style={{ marginTop: '4px', padding: '10px 12px', backgroundColor: r.estado === 'rechazado' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(74, 124, 89, 0.1)', border: r.estado === 'rechazado' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(74, 124, 89, 0.3)', borderRadius: '10px', fontSize: '12px', lineHeight: 1.4 }}>
+                  <strong style={{ color: r.estado === 'rechazado' ? '#EF4444' : '#4a7c59', display: 'block', marginBottom: '2px' }}>
                     {r.estado === 'rechazado' ? 'Motivo del rechazo:' : '✅ Programado para recolección:'}
                   </strong>
                   <span style={{ color: '#e2e8f0' }}>{r.justificacion_rechazo}</span>

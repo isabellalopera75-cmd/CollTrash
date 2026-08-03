@@ -1,13 +1,13 @@
 :root {
-  --pc-primary: #00FF9D;
-  --pc-bg-background: #0A0D14;
-  --pc-bg-card: #141822;
-  --pc-border: #242B3B;
-  --pc-text-foreground: #F8F9FA;
-  --pc-text-muted: #8C95A6;
-  --pc-status-danger: #EF4444;
-  --pc-status-warning: #F59E0B;
-  --pc-status-success: #10B981;
+  --pc-primary: #4a7c59;
+  --pc-bg-background: #080c0a;
+  --pc-bg-card: transparent;
+  --pc-border: #1a2028;
+  --pc-text-foreground: #ffffff;
+  --pc-text-muted: #5a5f5c;
+  --pc-status-danger: #ef4444;
+  --pc-status-warning: #f59e0b;
+  --pc-status-success: #10b981;
 }
 
 .pc-wrapper {
@@ -38,7 +38,7 @@
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 50px rgba(0, 255, 157, 0.08);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .pc-wrapper {
     padding: 0;
     background-color: var(--pc-bg-background);
@@ -380,3 +380,84 @@
 .pc-badge-primary { background: rgba(0, 255, 157, 0.15); color: var(--pc-primary); }
 .pc-badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--pc-status-warning); }
 .pc-badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--pc-status-danger); }
+
+/* Override browser autofill to maintain dark theme */
+.transparent-input:-webkit-autofill,
+.transparent-input:-webkit-autofill:hover,
+.transparent-input:-webkit-autofill:focus,
+.transparent-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #080c0a inset !important;
+  -webkit-text-fill-color: white !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Onboarding Grid */
+.pc-onboarding-grid {
+  display: grid;
+  grid-template-columns: 1fr 520px;
+  flex: 1;
+}
+
+.pc-left-panel {
+  border-right: 1px solid rgba(255,255,255,0.05);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.pc-right-panel {
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+
+.pc-hero-text {
+  font-size: 8.5vw;
+}
+
+@media (max-width: 1024px) {
+  .pc-onboarding-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .pc-left-panel {
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding: 32px 24px;
+    gap: 40px;
+    text-align: center;
+  }
+  
+  .pc-left-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .pc-divider-line {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .pc-features-list {
+    align-items: center;
+  }
+
+  .pc-left-footer {
+    justify-content: center !important;
+    gap: 24px;
+  }
+  
+  .pc-hero-text {
+    font-size: clamp(5rem, 18vw, 10rem);
+  }
+  
+  .pc-right-panel {
+    padding: 32px 24px;
+  }
+}
+
+

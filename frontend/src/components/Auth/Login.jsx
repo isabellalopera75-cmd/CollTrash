@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import './Login.css';
 
 const roles = [
-  { key: 'administrador', label: 'Administrador', icon: 'bi-shield-fill-check', desc: 'Gestión de rutas y operaciones' },
-  { key: 'conductor',     label: 'Conductor',      icon: 'bi-truck-front-fill',   desc: 'Ver mi ruta asignada'          },
-  { key: 'ciudadano',     label: 'Ciudadano',       icon: 'bi-person-circle',      desc: 'Reportar y consultar servicios' },
+  { key: 'administrador', label: 'ADMINISTRADOR' },
+  { key: 'conductor',     label: 'CONDUCTOR'     },
+  { key: 'ciudadano',     label: 'CIUDADANO'     },
 ];
 
 export default function Login() {
@@ -20,7 +21,9 @@ export default function Login() {
 
   useEffect(() => {
     const prevBg = document.body.style.backgroundColor;
-    document.body.style.backgroundColor = '#0D1017';
+    document.body.style.backgroundColor = 'var(--bg-global)';
+    document.body.style.margin = '0';
+    document.body.style.fontFamily = '"Inter", "Geist", sans-serif';
     return () => {
       document.body.style.backgroundColor = prevBg;
     };
@@ -28,15 +31,18 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (rolSeleccionado === 'ciudadano') {
+      window.location.href = '/portal';
+      return;
+    }
     setCargando(true);
     setError('');
     try {
       const res = await login(form);
       const usuario = res.data.usuario;
 
-      // Validar que el rol coincida con la pestaña seleccionada
       if (usuario.rol !== rolSeleccionado) {
-        setError(`Esta cuenta no es de tipo "${roles.find(r => r.key === rolSeleccionado)?.label}". Selecciona el rol correcto.`);
+        setError(`Cuenta inválida para rol ${rolSeleccionado.toUpperCase()}.`);
         localStorage.removeItem('token');
         return;
       }
@@ -59,152 +65,219 @@ export default function Login() {
   const esCiudadano = rolSeleccionado === 'ciudadano';
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'var(--bg-global)',
-      padding: '20px',
-      paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))',
-      paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
-      boxSizing: 'border-box',
-      backgroundImage: 'radial-gradient(ellipse at 50% 0%, color-mix(in oklch, var(--color-primary), transparent 92%) 0%, transparent 60%)',
-    }}>
-      <div style={{ width: '100%', maxWidth: '460px' }}>
+    <div className="login-wrapper">
+      {/* TEXTURA TIPOGRÁFICA DE FONDO */}
+      <div className="login-bg-text">
+        <div className="login-bg-line">COLL</div>
+        <div className="login-bg-line">TRASH</div>
+      </div>
 
-        {/* Logo & título */}
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{
-            width: '64px', height: '64px', borderRadius: '16px',
-            background: 'color-mix(in oklch, var(--color-primary), transparent 85%)',
-            border: '1px solid color-mix(in oklch, var(--color-primary), transparent 60%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 16px', fontSize: '28px', color: 'var(--color-primary)'
-          }}>
-            <i className="bi bi-truck-front-fill"></i>
-          </div>
-          <h1 style={{ fontSize: '26px', fontWeight: 800, color: 'white', letterSpacing: '-0.5px' }}>
-            Coll<span style={{ color: 'var(--color-primary)' }}>Trash</span>
-          </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
-            Gestión de recolección · Neiva, Colombia
-          </p>
+      {/* TOPBAR */}
+      <div className="login-topbar">
+        <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '2px', color: '#fff' }}>
+          COLL<span style={{ color: 'transparent', WebkitTextStroke: '1px #fff' }}>TRASH</span>
         </div>
+        <div className="login-topbar-status">
+          <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-primary)', animation: 'blink 1.5s infinite' }}></div>
+          SISTEMA ACTIVO / Neiva, COL
+        </div>
+      </div>
 
-        {/* Card principal */}
-        <div className="card" style={{ padding: '28px', border: '1px solid var(--border-color)' }}>
+      {/* VERSIÓN */}
+      <div style={{
+        position: 'absolute',
+        bottom: '40px',
+        right: '40px',
+        transform: 'rotate(-90deg)',
+        transformOrigin: 'right bottom',
+        fontSize: '10px',
+        color: '#222',
+        fontWeight: 600,
+        letterSpacing: '3px',
+        zIndex: 10
+      }}>
+        GRS — v2.4.1 — 2026
+      </div>
 
-          {/* Selector de rol */}
-          <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: '12px' }}>
-            ACCEDER COMO
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
+      {/* FOOTER */}
+      <div style={{
+        position: 'absolute',
+        bottom: '40px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        fontSize: '10px',
+        color: '#333',
+        fontWeight: 600,
+        letterSpacing: '1px',
+        zIndex: 10
+      }}>
+        © 2026 COLLTRASH · NEIVA, COLOMBIA
+      </div>
+
+      {/* FORMULARIO */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10
+      }}>
+        <div className="login-form-container">
+          
+          <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, letterSpacing: '3px', marginBottom: '32px' }}>
+            ACCESO AL SISTEMA
+          </div>
+
+          <div className="login-tabs-container">
             {roles.map(r => (
               <button
                 key={r.key}
-                type="button"
+                className="login-tab-btn"
                 onClick={() => { setRolSeleccionado(r.key); setError(''); }}
                 style={{
-                  padding: '12px 8px',
-                  borderRadius: '10px',
-                  border: `1px solid ${rolSeleccionado === r.key ? 'var(--color-primary)' : 'var(--border-color)'}`,
-                  background: rolSeleccionado === r.key
-                    ? 'color-mix(in oklch, var(--color-primary), transparent 88%)'
-                    : 'var(--bg-secondary)',
-                  color: rolSeleccionado === r.key ? 'var(--color-primary)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                  fontFamily: 'Inter, sans-serif',
+                  color: rolSeleccionado === r.key ? '#fff' : '#555',
+                  borderBottom: `2px solid ${rolSeleccionado === r.key ? 'var(--color-primary)' : 'transparent'}`
                 }}
               >
-                <i className={`bi ${r.icon}`} style={{ fontSize: '20px' }}></i>
-                <span style={{ fontSize: '12px', fontWeight: 600 }}>{r.label}</span>
+                {r.label}
               </button>
             ))}
           </div>
 
-          {/* Descripción del rol */}
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '24px' }}>
-            {roles.find(r => r.key === rolSeleccionado)?.desc}
-          </p>
-
-          {/* Error */}
           {error && (
-            <div className="status-badge status-danger" style={{ width: '100%', justifyContent: 'center', marginBottom: '16px', padding: '10px 14px', borderRadius: '8px' }}>
-              <i className="bi bi-exclamation-triangle-fill" style={{ marginRight: '6px' }}></i>
+            <div style={{ color: '#ef4444', fontSize: '11px', marginBottom: '20px', letterSpacing: '0.5px' }}>
               {error}
             </div>
           )}
 
-          {/* Formulario o botón Portal Ciudadano */}
-          {esCiudadano ? (
-            <div style={{ display: 'grid', gap: '12px' }}>
-              <button
-                type="button"
-                onClick={() => window.location.href = '/portal'}
-                className="btn btn-primary"
-                style={{ width: '100%', padding: '16px', gap: '12px', fontWeight: 700, fontSize: '15px', justifyContent: 'center', borderRadius: '12px' }}
-              >
-                <i className="bi bi-person-check-fill" style={{ fontSize: '20px' }}></i>
-                Ingresar al Portal Ciudadano
-              </button>
-              <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                Accede para consultar los horarios de tu barrio, realizar reportes ciudadanos y recibir seguimiento en vivo.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  Correo electrónico
-                </label>
-                <input
-                  type="email" required
-                  className="card"
-                  style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', padding: '12px', borderRadius: '8px' }}
-                  value={form.email}
-                  onChange={e => setForm({...form, email: e.target.value})}
-                  placeholder="usuario@colltrash.co"
-                />
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            {esCiudadano ? (
+              <div style={{ fontSize: '13px', color: '#666', lineHeight: 1.6, marginBottom: '20px' }}>
+                Accede al Portal Ciudadano para consultar horarios, reportar y hacer seguimiento en vivo.
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  Contraseña
-                </label>
+            ) : (
+              <>
                 <div style={{ position: 'relative' }}>
+                  <label style={{ position: 'absolute', top: '-20px', left: 0, fontSize: '10px', color: '#666', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTRÓNICO</label>
+                  <input
+                    type="email" required
+                    value={form.email}
+                    onChange={e => setForm({...form, email: e.target.value})}
+                    className="transparent-input"
+                    style={{
+                      width: '100%',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid color-mix(in oklch, var(--color-primary), transparent 70%)',
+                      color: '#fff',
+                      fontSize: '18px',
+                      padding: '10px 0',
+                      outline: 'none',
+                      caretColor: 'var(--color-primary)',
+                      transition: 'border-color 0.3s'
+                    }}
+                    onFocus={e => e.target.style.borderBottom = '1px solid var(--color-primary)'}
+                    onBlur={e => e.target.style.borderBottom = '1px solid color-mix(in oklch, var(--color-primary), transparent 70%)'}
+                    placeholder="usuario@colltrash.com"
+                  />
+                </div>
+
+                <div style={{ position: 'relative', marginTop: '10px' }}>
+                  <label style={{ position: 'absolute', top: '-20px', left: 0, fontSize: '10px', color: '#666', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
                   <input
                     type={mostrarPassword ? 'text' : 'password'} required
-                    className="card"
-                    style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', padding: '12px 44px 12px 12px', borderRadius: '8px' }}
                     value={form.password}
                     onChange={e => setForm({...form, password: e.target.value})}
+                    className="transparent-input"
+                    style={{
+                      width: '100%',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid color-mix(in oklch, var(--color-primary), transparent 70%)',
+                      color: '#fff',
+                      fontSize: '18px',
+                      padding: '10px 36px 10px 0',
+                      outline: 'none',
+                      caretColor: 'var(--color-primary)',
+                      transition: 'border-color 0.3s'
+                    }}
+                    onFocus={e => e.target.style.borderBottom = '1px solid var(--color-primary)'}
+                    onBlur={e => e.target.style.borderBottom = '1px solid color-mix(in oklch, var(--color-primary), transparent 70%)'}
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setMostrarPassword(!mostrarPassword)}
-                    style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}
+                    style={{ position: 'absolute', right: 0, bottom: '12px', background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0 }}
                   >
-                    <i className={`bi ${mostrarPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                    <i className={`bi ${mostrarPassword ? 'bi-eye-slash' : 'bi-eye'}`} style={{ fontSize: '16px' }}></i>
                   </button>
+                  <div style={{ position: 'absolute', right: 0, top: '-20px', fontSize: '10px', color: '#666', cursor: 'pointer', letterSpacing: '1px' }}>¿Olvidaste?</div>
                 </div>
-                <p style={{ textAlign: 'right', fontSize: '11px', color: 'var(--color-primary)', marginTop: '6px', cursor: 'pointer' }}>¿Olvidaste tu contraseña?</p>
-              </div>
-              <button type="submit" className="btn btn-primary" style={{ padding: '14px', fontWeight: 700, marginTop: '4px', fontSize: '14px' }} disabled={cargando}>
-                {cargando ? (
-                  <><i className="bi bi-arrow-repeat" style={{ marginRight: '8px', animation: 'spin 1s linear infinite' }}></i>Verificando...</>
-                ) : 'Ingresar'}
-              </button>
-            </form>
-          )}
-        </div>
+              </>
+            )}
 
-        <p style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', marginTop: '20px' }}>
-          © 2026 CollTrash · Todos los derechos reservados.
-        </p>
+            <div style={{ marginTop: '20px' }}>
+              <button 
+                type="submit" 
+                disabled={cargando}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '20px',
+                  cursor: cargando ? 'wait' : 'pointer',
+                  padding: 0
+                }}
+              >
+                <div style={{
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '50%',
+                  background: 'var(--color-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#000',
+                  fontSize: '20px',
+                  transition: 'transform 0.2s',
+                  transform: cargando ? 'scale(0.9)' : 'scale(1)'
+                }}>
+                  {cargando ? <i className="bi bi-arrow-repeat" style={{ animation: 'spin 1s linear infinite' }}></i> : <i className="bi bi-arrow-right"></i>}
+                </div>
+                <span style={{ fontSize: '15px', color: '#fff', fontWeight: 800, letterSpacing: '4px' }}>
+                  {cargando ? 'VERIFICANDO...' : 'INGRESAR'}
+                </span>
+              </button>
+            </div>
+          </form>
+
+        </div>
       </div>
+      
+      <style>{`
+        @keyframes blink {
+          0% { opacity: 1; }
+          50% { opacity: 0.3; }
+          100% { opacity: 1; }
+        }
+        @keyframes spin {
+          100% { transform: rotate(360deg); }
+        }
+        input::placeholder {
+          color: rgba(255, 255, 255, 0.2);
+        }
+        /* Fix Chrome autofill background */
+        .transparent-input:-webkit-autofill,
+        .transparent-input:-webkit-autofill:hover, 
+        .transparent-input:-webkit-autofill:focus, 
+        .transparent-input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0 30px var(--bg-global) inset !important;
+            -webkit-text-fill-color: white !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
+      `}</style>
     </div>
   );
 }

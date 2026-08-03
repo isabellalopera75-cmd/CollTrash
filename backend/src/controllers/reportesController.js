@@ -3,6 +3,7 @@ const { crearNotificacion } = require('../services/notificacionService');
 const { getIo } = require('../config/socket');
 const fs = require('fs');
 const path = require('path');
+const { getFechaColombia } = require('../utils/dateUtils');
 const heicConvert = require('heic-convert');
 require('dotenv').config();
 
@@ -155,7 +156,7 @@ const atenderReporte = async (req, res) => {
       return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta cerrada.' });
     }
 
-    if (new Date(destino.fecha) < new Date(new Date().toISOString().split('T')[0])) {
+    if (new Date(destino.fecha) < new Date(getFechaColombia())) {
       return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta pasada.' });
     }
 
@@ -307,7 +308,7 @@ const actualizarEstado = async (req, res) => {
           return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta cerrada.' });
         }
 
-        if (new Date(destino.fecha) < new Date(new Date().toISOString().split('T')[0])) {
+        if (new Date(destino.fecha) < new Date(getFechaColombia())) {
           await client.query('ROLLBACK');
           return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta pasada.' });
         }

@@ -1,17 +1,20 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { obtenerHistorial, obtenerNovedadesOperativas } from '../services/api';
+import API from '../services/api';
 
 export default function Historial() {
-  const [activeTab, setActiveTab] = useState('auditoria');
   const [logs, setLogs] = useState([]);
   const [novedades, setNovedades] = useState([]);
+  const [notificaciones, setNotificaciones] = useState([]);
+  
+  const queryParams = new URLSearchParams(window.location.search);
+  const initialTab = queryParams.get('tab') || 'auditoria';
+  const targetNotiId = queryParams.get('noti_id');
+  
+  const [activeTab, setActiveTab] = useState(initialTab === 'notificaciones' ? 'notificaciones' : (initialTab === 'novedades' ? 'novedades' : 'auditoria'));
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (activeTab === 'auditoria') cargarHistorial();
-    else cargarNovedades();
-  }, [activeTab]);
+  const notiRefs = useRef({});
 
   const cargarHistorial = async () => {
     setLoading(true);
@@ -36,6 +39,37 @@ export default function Historial() {
       setLoading(false);
     }
   };
+
+  const cargarNotificaciones = async () => {
+    setLoading(true);
+    try {
+      const res = await API.get('/notificaciones/todas');
+      setNotificaciones(res.data.notificaciones || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'auditoria') cargarHistorial();
+    else if (activeTab === 'novedades') cargarNovedades();
+    else if (activeTab === 'notificaciones') cargarNotificaciones();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'notificaciones' && targetNotiId && notificaciones.length > 0) {
+      setTimeout(() => {
+        const el = notiRefs.current[targetNotiId];
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.style.background = 'rgba(0, 255, 157, 0.1)';
+          setTimeout(() => el.style.background = 'transparent', 3000);
+        }
+      }, 300);
+    }
+  }, [notificaciones, targetNotiId, activeTab]);
 
   const getIcon = (accion) => {
     if (accion.includes('Ruta')) return <i className="bi bi-map-fill"></i>;
@@ -63,7 +97,8 @@ export default function Historial() {
       fontSize: '14px'
     }),
     th: { padding: '15px 20px', fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', textAlign: 'left' },
-    td: { padding: '15px 20px', fontSize: '14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }
+    td: { padding: '15px 20px', fontSize: '14px', borderBottom: '1px solid rgba(255,255,255,0.05)' },
+    border: 'var(--border-color)'
   };
 
   return (
@@ -76,12 +111,15 @@ export default function Historial() {
       </div>
 
       {/* TABS */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--border-color)' }}>
+      <div style={{ display: 'flex', borderBottom: `1px solid ${s.border}` }}>
         <div style={s.tab(activeTab === 'auditoria')} onClick={() => setActiveTab('auditoria')}>
           <i className="bi bi-shield-check" style={{ marginRight: '8px' }}></i> Auditoría de Sistema
         </div>
         <div style={s.tab(activeTab === 'novedades')} onClick={() => setActiveTab('novedades')}>
           <i className="bi bi-journal-text" style={{ marginRight: '8px' }}></i> Bitácora de Novedades
+        </div>
+        <div style={s.tab(activeTab === 'notificaciones')} onClick={() => setActiveTab('notificaciones')}>
+          <i className="bi bi-bell-fill" style={{ marginRight: '8px' }}></i> Notificaciones
         </div>
       </div>
 
@@ -137,17 +175,53 @@ export default function Historial() {
               ) : novedades.map(n => (
                 <tr key={n.id}>
                   <td style={s.td}>
-                    <div style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
-                      <i className="bi bi-lightning-fill" style={{ marginRight: '8px' }}></i>
-                      {n.tipo_novedad === 'REACTIVACION_MANUAL' ? 'Reactivación de Inicio' : n.tipo_novedad}
+                    <div style={{ fontWeight: 600, color: n.tipo_novedad === 'REPORTE_CONDUCTOR_TARDIO' ? 'var(--color-danger)' : 'var(--color-warning)' }}>
+                      <i className={n.tipo_novedad === 'REPORTE_CONDUCTOR_TARDIO' ? "bi bi-exclamation-triangle-fill" : "bi bi-lightning-fill"} style={{ marginRight: '8px' }}></i>
+                      {n.tipo_novedad === 'REACTIVACION_MANUAL' ? 'Reactivación de Inicio' : 
+                       n.tipo_novedad === 'REPORTE_CONDUCTOR_TARDIO' ? 'Reporte de Inicio Tardío' : n.tipo_novedad}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Ruta: {n.ruta_nombre}</div>
                   </td>
-                  <td style={{ ...s.td, color: '#eee' }}>{n.descripcion}</td>
-                  <td style={s.td}>
-                    <div style={{ fontWeight: 500 }}>{n.admin_nombre}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Administrador</div>
+                  <td style={{ ...s.td, color: '#eee' }}>
+                    {n.tipo_novedad === 'REPORTE_CONDUCTOR_TARDIO' && <strong style={{ color: 'var(--color-danger)' }}>Motivo del conductor: </strong>}
+                    {n.descripcion}
                   </td>
+                  <td style={s.td}>
+                    <div style={{ fontWeight: 500 }}>{n.tipo_novedad === 'REPORTE_CONDUCTOR_TARDIO' ? 'Conductor' : n.admin_nombre}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{n.tipo_novedad === 'REPORTE_CONDUCTOR_TARDIO' ? 'Reporte automático' : 'Administrador'}</div>
+                  </td>
+                  <td style={{ ...s.td, fontSize: '12px', color: 'var(--text-muted)' }}>
+                    {new Date(n.fecha).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {activeTab === 'notificaciones' && (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>TIPO DE NOTIFICACIÓN</th>
+                <th style={s.th}>MENSAJE</th>
+                <th style={s.th}>FECHA Y HORA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="3" style={{ padding: '40px', textAlign: 'center' }}>Cargando notificaciones...</td></tr>
+              ) : notificaciones.length === 0 ? (
+                <tr><td colSpan="3" style={{ padding: '40px', textAlign: 'center' }}>No hay notificaciones registradas.</td></tr>
+              ) : notificaciones.map(n => (
+                <tr key={n.id} ref={el => notiRefs.current[n.id] = el} style={{ transition: 'background 1s' }}>
+                  <td style={s.td}>
+                    <div style={{ fontWeight: 600, color: n.tipo === 'urgente' ? 'var(--color-danger)' : n.tipo === 'operativo' ? 'var(--color-warning)' : 'var(--color-primary)' }}>
+                      <i className={n.tipo === 'urgente' ? "bi bi-exclamation-triangle-fill" : "bi bi-info-circle-fill"} style={{ marginRight: '8px' }}></i>
+                      {n.titulo}
+                    </div>
+                  </td>
+                  <td style={{ ...s.td, color: '#eee' }}>{n.mensaje}</td>
                   <td style={{ ...s.td, fontSize: '12px', color: 'var(--text-muted)' }}>
                     {new Date(n.fecha).toLocaleString()}
                   </td>
