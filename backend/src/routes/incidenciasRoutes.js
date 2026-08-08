@@ -29,7 +29,7 @@ router.put('/:id/resolver', verificarToken, soloAdmin, async (req, res) => {
     // ==========================================
     // CASO 1: operario_lesionado (Manual)
     // ==========================================
-    if (incidencia.tipo === 'operario_lesionado') {
+    if (incidencia.tipo === 'operario_lesionado' && (!nuevo_conductor_id || !nuevo_vehiculo_id)) {
       const r = await pool.query(
         'UPDATE incidencias_conductor SET resuelto = TRUE, resolucion = $1 WHERE id = $2 RETURNING *',
         [resolucion || 'Ambulancia y protocolo gestionado por el administrador', incidencia_id]
@@ -46,18 +46,24 @@ router.put('/:id/resolver', verificarToken, soloAdmin, async (req, res) => {
     // ==========================================
     // CASO 2: falla_motor o accidente (REASIGNACIÓN)
     // ==========================================
-    if (incidencia.tipo === 'falla_motor' || incidencia.tipo === 'accidente') {
+    if (incidencia.tipo === 'falla_motor' || incidencia.tipo === 'accidente' || incidencia.tipo === 'operario_lesionado') {
       if (!nuevo_conductor_id || !nuevo_vehiculo_id) {
         return res.status(400).json({ mensaje: 'Se requiere conductor y vehículo de reemplazo para este tipo de incidencia.' });
       }
 
-      const asigRes = await pool.query('SELECT ruta_fija_id FROM asignaciones_semanales WHERE id = $1', [incidencia.asignacion_id]);
-      const ruta_fija_id = asigRes.rows[0].ruta_fija_id;
+      const asigRes = await pool.query('SELECT ruta_fija_id, fecha, km_recorridos, toneladas FROM asignaciones_semanales WHERE id = $1', [incidencia.asignacion_id]);
+      const oldAsig = asigRes.rows[0];
+      const ruta_fija_id = oldAsig.ruta_fija_id;
 
+      // 1. Actualizar asignación original con el nuevo conductor y vehículo
       await pool.query(
-        'UPDATE asignaciones_semanales SET conductor_id = $1, vehiculo_id = $2 WHERE id = $3',
+        `UPDATE asignaciones_semanales 
+         SET conductor_id = $1, vehiculo_id = $2, estado = 'pendiente' 
+         WHERE id = $3`,
         [nuevo_conductor_id, nuevo_vehiculo_id, incidencia.asignacion_id]
       );
+
+      const nueva_asignacion_id = incidencia.asignacion_id;
 
       await pool.query(
         `INSERT INTO cambios_conductor 
@@ -91,7 +97,7 @@ router.put('/:id/resolver', verificarToken, soloAdmin, async (req, res) => {
         titulo: '🚨 Relevo de Emergencia',
         mensaje: 'Tienes un relevo de emergencia asignado. Revisa tu panel para la ubicación exacta.',
         tipo: 'urgente',
-        metadata: { tipo: 'RELEVO_EMERGENCIA', asignacion_id: incidencia.asignacion_id, lat: incidencia.lat, lng: incidencia.lng }
+        metadata: { tipo: 'RELEVO_EMERGENCIA', asignacion_id: nueva_asignacion_id, lat: incidencia.lat, lng: incidencia.lng }
       });
 
       return res.json({ mensaje: 'Refuerzo asignado e incidencia resuelta.', incidencia: finalRes.rows[0] });

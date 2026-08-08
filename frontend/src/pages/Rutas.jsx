@@ -107,12 +107,14 @@ export default function Rutas() {
   const getStatusClass = (status) => {
     if (status === 'activa') return 'status-active';
     if (status === 'completada') return 'status-active';
+    if (status === 'incompleta') return ''; // Se maneja inline en el span
     return 'status-warning';
   };
 
   const getStatusIcon = (status) => {
     if (status === 'activa') return 'bi-play-circle-fill';
     if (status === 'completada') return 'bi-check-circle-fill';
+    if (status === 'incompleta') return 'bi-exclamation-octagon-fill';
     return 'bi-clock-history';
   };
 
@@ -246,9 +248,9 @@ export default function Rutas() {
                    <span style={{ fontSize: '10px', padding: '4px 10px', borderRadius: '4px', background: 'rgba(255, 165, 0, 0.1)', color: 'orange', fontWeight: 700 }}>
                      TURNO {a.jornada_nombre?.toUpperCase()}
                    </span>
-                   <span className={`status-badge ${esExpirado ? '' : getStatusClass(a.estado)}`} style={{ fontSize: '10px', padding: '5px 12px', ...(esExpirado ? { color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.1)' } : {}) }}>
+                   <span className={`status-badge ${esExpirado ? '' : getStatusClass(a.estado)}`} style={{ fontSize: '10px', padding: '5px 12px', ...(esExpirado ? { color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.1)' } : (a.estado === 'incompleta' ? { color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.1)' } : {})) }}>
                      <i className={`bi ${esExpirado ? 'bi-x-circle-fill' : getStatusIcon(a.estado)}`} style={{ marginRight: '6px' }}></i>
-                     {esExpirado ? 'Expirado' : (a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'activa' ? 'En curso' : 'Completado'))}
+                     {esExpirado ? 'Expirado' : (a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'activa' ? 'En curso' : (a.estado === 'incompleta' ? 'Detenida' : 'Completado')))}
                    </span>
                    <div style={{ display: 'flex', gap: '8px' }}>
                        {(() => {

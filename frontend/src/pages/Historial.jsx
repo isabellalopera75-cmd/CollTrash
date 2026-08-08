@@ -124,7 +124,7 @@ export default function Historial() {
       </div>
 
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-        {activeTab === 'auditoria' ? (
+        {activeTab === 'auditoria' && (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ background: 'rgba(255,255,255,0.03)' }}>
               <tr>
@@ -157,7 +157,9 @@ export default function Historial() {
               ))}
             </tbody>
           </table>
-        ) : (
+        )}
+
+        {activeTab === 'novedades' && (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ background: 'rgba(255,255,255,0.03)' }}>
               <tr>

@@ -157,13 +157,15 @@ export default function ConductorPanel() {
       });
     });
     cargar(); 
+    const currentSocket = socketRef.current;
     return () => { 
       clearInterval(simRef.current); 
       clearInterval(timerRef.current); 
       if (window.emitIntervalRef) clearInterval(window.emitIntervalRef);
-      if (socketRef.current) socketRef.current.disconnect();
+      if (currentSocket) currentSocket.disconnect();
       document.body.style.backgroundColor = prevBg;
     }; 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -280,6 +282,7 @@ export default function ConductorPanel() {
       socketRef.current.off(`posicion_conductor_${asignacion.id}`, handlePosicion);
       socketRef.current.off(`simulacion_completada_${asignacion.id}`, handleCompletada);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asignacion]);
 
   useEffect(() => {
@@ -348,6 +351,7 @@ export default function ConductorPanel() {
       window.location.reload(); 
     } catch (e) {
       console.error('Error al finalizar:', e.response?.data || e.message);
+      alert(e.response?.data?.mensaje || 'Ocurrió un error al intentar finalizar la ruta. Por favor intenta de nuevo.');
     }
   };
 

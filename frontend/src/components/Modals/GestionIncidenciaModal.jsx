@@ -38,7 +38,7 @@ export default function GestionIncidenciaModal({ incidenciaId, onClose, onResolv
         } catch (e) { console.error('Error cargando teléfonos', e); }
       }
 
-      if (found.tipo === 'falla_motor' || found.tipo === 'accidente') {
+      if (found.tipo === 'falla_motor' || found.tipo === 'accidente' || found.tipo === 'operario_lesionado') {
         setCargandoRecursos(true);
         try {
           const resRec = await API.get('/rutas/recursos-libres');
@@ -91,31 +91,28 @@ export default function GestionIncidenciaModal({ incidenciaId, onClose, onResolv
               
               {/* CASO 1: operario_lesionado */}
               {incidencia.tipo === 'operario_lesionado' && (
-                <>
-                  <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', padding: '15px', borderRadius: '8px', textAlign: 'center' }}>
-                    <i className="bi bi-telephone-outbound-fill" style={{ fontSize: '24px', color: '#ef4444' }}></i>
-                    <h4 style={{ color: '#ef4444', margin: '10px 0 5px' }}>Ambulancia: {telefonos.telefono_ambulancia || 'Cargando...'}</h4>
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Contacta a emergencias inmediatamente. No cierres este panel hasta haber despachado ayuda.</p>
-                  </div>
-                  <button type="submit" className="btn btn-primary" style={{ background: '#ef4444', border: 'none', width: '100%', padding: '12px', fontWeight: 'bold' }}>
-                    Marcar como Ambulancia Gestionada
-                  </button>
-                </>
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', padding: '15px', borderRadius: '8px', textAlign: 'center', marginBottom: '8px' }}>
+                  <i className="bi bi-telephone-outbound-fill" style={{ fontSize: '24px', color: '#ef4444' }}></i>
+                  <h4 style={{ color: '#ef4444', margin: '10px 0 5px' }}>Ambulancia: {telefonos.telefono_ambulancia || 'Cargando...'}</h4>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Contacta a emergencias inmediatamente.</p>
+                </div>
               )}
 
               {/* CASO 2: falla_motor o accidente */}
               {(incidencia.tipo === 'falla_motor' || incidencia.tipo === 'accidente') && (
-                <>
-                  <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '12px', borderRadius: '8px', textAlign: 'center', marginBottom: '8px' }}>
-                    <i className="bi bi-truck" style={{ fontSize: '20px', color: '#f59e0b' }}></i>
-                    <h4 style={{ color: '#f59e0b', margin: '5px 0' }}>Grúa de Rescate: {telefonos.telefono_grua || 'Cargando...'}</h4>
-                  </div>
+                <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '12px', borderRadius: '8px', textAlign: 'center', marginBottom: '8px' }}>
+                  <i className="bi bi-truck" style={{ fontSize: '20px', color: '#f59e0b' }}></i>
+                  <h4 style={{ color: '#f59e0b', margin: '5px 0' }}>Grúa de Rescate: {telefonos.telefono_grua || 'Cargando...'}</h4>
+                </div>
+              )}
 
+              {(incidencia.tipo === 'falla_motor' || incidencia.tipo === 'accidente' || incidencia.tipo === 'operario_lesionado') && (
+                <>
                   {cargandoRecursos ? <p style={{ fontSize: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>Buscando personal y vehículos libres...</p> : (
                     <>
                       <div>
-                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>1. Conductor de Relevo</label>
-                        <select required value={resolucionForm.nuevo_conductor_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_conductor_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>1. Conductor de Relevo {incidencia.tipo === 'operario_lesionado' ? '(Opcional)' : ''}</label>
+                        <select required={incidencia.tipo !== 'operario_lesionado'} value={resolucionForm.nuevo_conductor_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_conductor_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white' }}>
                           <option value="">Selecciona conductor libre...</option>
                           {recursosLibres.conductores
                             .filter(c => c.id !== incidencia.conductor_id)
@@ -123,20 +120,20 @@ export default function GestionIncidenciaModal({ incidenciaId, onClose, onResolv
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>2. Vehículo de Reemplazo</label>
-                        <select required value={resolucionForm.nuevo_vehiculo_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_vehiculo_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>2. Vehículo de Reemplazo {incidencia.tipo === 'operario_lesionado' ? '(Opcional)' : ''}</label>
+                        <select required={incidencia.tipo !== 'operario_lesionado'} value={resolucionForm.nuevo_vehiculo_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_vehiculo_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white' }}>
                           <option value="">Selecciona vehículo libre...</option>
                           {recursosLibres.vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa} ({v.capacidad_ton} Ton)</option>)}
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>3. ETA Estimado de Rescate (Minutos)</label>
-                        <input required type="number" value={resolucionForm.eta_minutos} onChange={e => setResolucionForm({...resolucionForm, eta_minutos: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white' }} placeholder="Ej: 15" />
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>3. ETA Estimado de Rescate (Minutos) {incidencia.tipo === 'operario_lesionado' ? '(Opcional)' : ''}</label>
+                        <input required={incidencia.tipo !== 'operario_lesionado'} type="number" value={resolucionForm.eta_minutos} onChange={e => setResolucionForm({...resolucionForm, eta_minutos: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white' }} placeholder="Ej: 15" />
                       </div>
                     </>
                   )}
-                  <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '10px', fontWeight: 'bold' }}>
-                    Asignar Relevo y Cerrar Incidencia
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '10px', fontWeight: 'bold', background: incidencia.tipo === 'operario_lesionado' ? '#ef4444' : 'var(--color-primary)', border: 'none' }}>
+                    {incidencia.tipo === 'operario_lesionado' ? (resolucionForm.nuevo_conductor_id ? 'Despachar Relevo, Ambulancia y Cerrar' : 'Marcar como Ambulancia Gestionada') : 'Asignar Relevo y Cerrar Incidencia'}
                   </button>
                 </>
               )}

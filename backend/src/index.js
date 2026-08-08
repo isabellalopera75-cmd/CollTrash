@@ -31,12 +31,7 @@ iniciarSocket(server);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowed = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : [];
-    if (!origin || allowed.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('No permitido por CORS'));
-    }
+    callback(null, true);
   },
   credentials: true
 };

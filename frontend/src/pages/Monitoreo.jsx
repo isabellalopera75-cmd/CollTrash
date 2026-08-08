@@ -271,56 +271,7 @@ function MonitoreoContent() {
              </div>
           </div>
 
-          <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
-             {/* PANEL FLOTANTE DE INCIDENCIAS */}
-             <div style={{
-               display: 'flex', flexDirection: 'column', gap: '12px',
-               width: '320px', maxHeight: 'calc(100vh - 120px)',
-               overflowY: 'auto', pointerEvents: 'none'
-             }}>
-               {incidencias.map((incidencia) => {
-                 const minutosAntiguedad = (new Date() - new Date(incidencia.created_at)) / (1000 * 60);
-                 const esReciente = minutosAntiguedad < 10; 
-                 
-                 return (
-                   <div key={incidencia.id} style={{
-                     backgroundColor: 'var(--bg-card, #ffffff)', borderRadius: '8px',
-                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '16px',
-                     pointerEvents: 'auto', 
-                     borderLeft: `4px solid ${['accidente', 'operario_lesionado'].includes(incidencia.tipo) ? '#ef4444' : '#f59e0b'}`,
-                     opacity: esReciente ? 1 : 0.65, 
-                     transition: 'opacity 0.3s ease', position: 'relative'
-                   }}>
-                     <button onClick={() => descartarVisualmente(incidencia.id)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '14px' }}>✕</button>
-                     
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '18px' }}>
-                          {['accidente', 'operario_lesionado'].includes(incidencia.tipo) ? '🚨' : 
-                           incidencia.tipo === 'falla_motor' ? '🔧' : '⚠️'}
-                        </span>
-                        <h5 style={{ margin: 0, fontSize: '13px', fontWeight: 600, textTransform: 'capitalize', color: ['accidente', 'operario_lesionado'].includes(incidencia.tipo) ? '#ef4444' : '#f59e0b' }}>
-                          {incidencia.tipo.replace('_', ' ')}
-                        </h5>
-                     </div>
-                     
-                     <div style={{ fontSize: '12px', color: '#555', marginBottom: '4px' }}>
-                       <strong>Conductor:</strong> {incidencia.conductor_nombre} <br/>
-                       <strong>Vehículo:</strong> {incidencia.vehiculo_placa}
-                     </div>
-                     <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 12px', fontStyle: 'italic' }}>
-                       "{incidencia.descripcion || 'Sin descripción adicional'}"
-                     </p>
-                     
-                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                       <button onClick={() => handleAbrirModalResolucion(incidencia)} style={{ padding: '6px 10px', fontSize: '11px', background: 'var(--color-primary, #22c55e)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>
-                         Gestionar / Resolver
-                       </button>
-                     </div>
-                   </div>
-                 );
-               })}
-             </div>
-           </div>
+
 
           <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 1000 }}>
              <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px' }}>

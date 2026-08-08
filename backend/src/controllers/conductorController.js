@@ -28,7 +28,7 @@ const iniciarRuta = async (req, res) => {
 
   try {
     const asignacion = await pool.query(
-      'SELECT a.*, rf.nombre as ruta_nombre FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2',
+      'SELECT a.*, rf.nombre as ruta_nombre FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND a.conductor_id = $2',
       [id, conductorId]
     );
 
@@ -491,7 +491,7 @@ const finalizarRuta = async (req, res) => {
 
       // Verificar que no haya sido completada por el simulador simultáneamente
       const checkEstado = await client.query(
-        'SELECT a.estado, a.hora_inicio_real FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND rf.conductor_default_id = $2 FOR UPDATE',
+        'SELECT a.estado, a.hora_inicio_real FROM asignaciones_semanales a JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id WHERE a.id = $1 AND a.conductor_id = $2 FOR UPDATE',
         [id, conductorId]
       );
 
@@ -522,10 +522,7 @@ const finalizarRuta = async (req, res) => {
                FROM descargas 
                WHERE asignacion_id = $1 AND hora_regreso IS NOT NULL
              ) + $3
-         WHERE id = $1
-         AND ruta_fija_id IN (
-           SELECT id FROM rutas_fijas WHERE conductor_default_id = $2
-         )`,
+         WHERE id = $1 AND conductor_id = $2`,
         [id, conductorId, toneladasNumero]
       );
 
