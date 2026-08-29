@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+DESPLIEGUE.md
+jiraHU.md
+*.sql
+*.png
+databaseColltrash
+
+# Ignorar builds locales para que Docker construya el suyo limpio
+frontend/build
