@@ -29,11 +29,25 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 iniciarSocket(server);
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    callback(null, true);
-  },
-  credentials: true
+// Los orígenes autorizados se declaran en FRONTEND_URL (.env, lista separada
+// por comas). Antes se aceptaba cualquier origen con credenciales activadas,
+// lo que anulaba por completo la política de mismo origen del navegador.
+const { esOrigenPermitido } = require('./config/socket');
+
+// Delegado en lugar de objeto fijo: hace falta la peticion entera para poder
+// comparar Origin contra Host y reconocer el mismo origen (ngrok, IP de LAN).
+//
+// Un origen no permitido ya no lanza una excepcion. Al hacerlo, Express
+// respondia 500 con la traza completa del servidor -- rutas absolutas de
+// archivos incluidas -- y el frontend, que solo sabe leer `mensaje`, mostraba
+// "Credenciales incorrectas" ante lo que en realidad era un bloqueo de CORS.
+// Ahora se responde sin cabeceras CORS y es el navegador quien bloquea, que es
+// el comportamiento estandar.
+const corsOptions = (req, callback) => {
+  callback(null, {
+    origin: esOrigenPermitido(req.headers.origin, req.headers.host),
+    credentials: true
+  });
 };
 app.use(cors(corsOptions));
 app.use(helmet({ 
@@ -91,9 +105,34 @@ app.use((req, res, next) => {
   res.sendFile(path.join(__dirname, '../../frontend/build/index.html'));
 });
 
+// Manejador de errores. Sin el, cualquier excepcion no capturada sale como HTML
+// con la traza del servidor y el frontend no encuentra el campo `mensaje`.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('Error no controlado:', err.message);
+  if (res.headersSent) return;
+  res.status(err.status || 500).json({ mensaje: 'Error interno del servidor.' });
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
+
+  // Aviso al arrancar si no hay credenciales de correo.
+  //
+  // La recuperación de contraseña responde siempre lo mismo —exista o no la
+  // cuenta— para no delatar qué correos están registrados. El efecto secundario
+  // es que un envío que nunca sale se ve igual que uno que salió bien: el
+  // usuario espera un correo que no llegará y nadie se entera. Este aviso al
+  // arranque convierte ese fallo silencioso en algo visible.
+  const { correoConfigurado } = require('./services/emailService');
+  if (!correoConfigurado()) {
+    console.warn('⚠️  Correo NO configurado: GMAIL_USER y GMAIL_PASS están vacíos en .env.');
+    console.warn('    La recuperación de contraseña generará el enlace pero NO lo enviará.');
+  } else {
+    console.log('📧 Correo configurado. La recuperación de contraseña enviará el enlace.');
+  }
+
   resumeActiveSimulations(); // Reanudar simulaciones si el servidor se reinició
 });
 

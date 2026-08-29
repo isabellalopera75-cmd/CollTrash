@@ -1,6 +1,13 @@
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
+/**
+ * Verifica el JWT y expone { id, email, rol, nombre } en req.usuario.
+ *
+ * Sólo la ausencia o invalidez del token produce 401: el frontend destruye la
+ * sesión ante un 401 (RF-01.5 / RNF-05). Los fallos de autorización sobre un
+ * recurso concreto deben responder 403 para no cerrar la sesión del usuario.
+ */
 const verificarToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -18,18 +25,19 @@ const verificarToken = (req, res, next) => {
   }
 };
 
-const soloAdmin = (req, res, next) => {
-  if (req.usuario.rol !== 'administrador') {
-    return res.status(403).json({ mensaje: 'Acceso denegado. Solo administradores.' });
+/**
+ * Restringe el acceso a los roles indicados (RNF-04).
+ * Responde 403: el usuario está autenticado, sólo no le corresponde el recurso.
+ */
+const exigirRol = (...roles) => (req, res, next) => {
+  if (!req.usuario || !roles.includes(req.usuario.rol)) {
+    return res.status(403).json({ mensaje: 'Acceso denegado. No tiene permisos para esta operación.' });
   }
   next();
 };
 
-const soloConductor = (req, res, next) => {
-  if (req.usuario.rol !== 'conductor') {
-    return res.status(403).json({ mensaje: 'Acceso denegado. Solo conductores.' });
-  }
-  next();
-};
+const soloAdmin = exigirRol('administrador');
+const soloConductor = exigirRol('conductor');
+const soloCiudadano = exigirRol('ciudadano');
 
-module.exports = { verificarToken, soloAdmin, soloConductor };
+module.exports = { verificarToken, exigirRol, soloAdmin, soloConductor, soloCiudadano };

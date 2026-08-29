@@ -1,53 +1,37 @@
 const pool = require('../config/database');
 const { crearNotificacion } = require('../services/notificacionService');
 
-// Obtener alertas/incidencias activas
+// Obtener alertas/incidencias activas (RF-07.3)
 const obtenerIncidenciasActivas = async (req, res) => {
   try {
+    // El conductor y el vehículo se toman de la asignación del día (RNF-12):
+    // leyendo rutas_fijas, una incidencia reportada tras un relevo aparecía
+    // atribuida al conductor titular y no a quien realmente iba conduciendo.
+    //
+    // Los JOIN son LEFT porque incidencias_conductor.asignacion_id admite NULL;
+    // con JOIN interno esas incidencias desaparecían del panel del admin.
     const resultado = await pool.query(
-      `SELECT i.*, 
-              ad.fecha as asignacion_fecha,
+      `SELECT i.*,
+              ad.fecha AS asignacion_fecha,
               rf.nombre AS ruta_nombre,
-              u.nombre AS conductor_nombre,
+              COALESCE(uc.nombre, u.nombre) AS conductor_nombre,
               v.placa AS vehiculo_placa
        FROM incidencias_conductor i
-       JOIN asignaciones_semanales ad ON ad.id = i.asignacion_id
-       JOIN rutas_fijas rf ON rf.id = ad.ruta_fija_id
-       JOIN usuarios u ON u.id = rf.conductor_default_id
-       JOIN vehiculos v ON v.id = rf.vehiculo_id
+       LEFT JOIN usuarios uc ON uc.id = i.conductor_id
+       LEFT JOIN asignaciones_semanales ad ON ad.id = i.asignacion_id
+       LEFT JOIN rutas_fijas rf ON rf.id = ad.ruta_fija_id
+       LEFT JOIN usuarios u ON u.id = COALESCE(ad.conductor_id, rf.conductor_default_id)
+       LEFT JOIN vehiculos v ON v.id = COALESCE(ad.vehiculo_id, rf.vehiculo_id)
        WHERE i.resuelto = FALSE
        ORDER BY i.created_at DESC`
     );
     res.json({ incidencias: resultado.rows });
   } catch (error) {
-    console.error(error);
-    // Return empty array if the table structure is slightly different to avoid breaking
-    res.json({ incidencias: [] });
-  }
-};
-
-// Alargar jornada de una asignación por una incidencia
-const alargarJornada = async (req, res) => {
-  const { id } = req.params; // ID de la incidencia
-  const { minutos_extra } = req.body;
-  
-  try {
-    // Obtener la asignación ligada a esta incidencia
-    const inc = await pool.query('SELECT asignacion_id FROM incidencias_conductor WHERE id = $1', [id]);
-    if (inc.rows.length === 0) return res.status(404).json({mensaje: 'Incidencia no encontrada'});
-    
-    // Aquí idealmente actualizaríamos un campo "tiempo_extra" en asignaciones_semanales
-    // Como no conocemos la estructura exacta de extensión, marcaremos la incidencia como resuelta
-    // Y dejaremos un log en algún lado si hay una tabla genérica de movimientos.
-    // Por ahora, cerramos la alerta:
-    await pool.query('UPDATE incidencias_conductor SET resuelto = TRUE WHERE id = $1', [id]);
-    
-    // Y podríamos crear una lógica de auditoría si existe la tabla
-    
-    res.json({ mensaje: `Jornada alargada ${minutos_extra} minutos con éxito` });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: 'Error al alargar jornada' });
+    // Antes se respondía 200 con una lista vacía, de modo que un fallo real de
+    // base de datos era indistinguible de "no hay incidencias" y el admin
+    // dejaba de ver emergencias sin enterarse de nada.
+    console.error('Error al obtener incidencias activas:', error.message);
+    res.status(500).json({ mensaje: 'Error al obtener las incidencias activas.' });
   }
 };
 
@@ -94,21 +78,18 @@ const crearIncidencia = async (req, res) => {
 
     // NOTIFICAR ADMIN: Nueva incidencia
     await crearNotificacion({
-      titulo: tipo === 'accidente' || tipo === 'operario_lesionado' ? '🚨 Emergencia Crítica' : '⚠️ Novedad en Ruta',
+      titulo: tipo === 'accidente' || tipo === 'operario_lesionado' ? 'Emergencia crítica' : 'Novedad en ruta',
       mensaje: `Conductor ${req.usuario.nombre}: ${tipo.replace('_', ' ')}. ${descripcion || ''}`,
       tipo: tipo === 'accidente' || tipo === 'operario_lesionado' ? 'urgente' : 'operativo',
       metadata: { asignacion_id: asignacion_id, incidencia_id: r.rows[0].id, tipo: 'INCIDENCIA' }
     });
 
-    const { getIo } = require('../config/socket');
-    const io = getIo();
-    if (io) {
-      io.emit('nueva_incidencia', {
-        ...r.rows[0],
-        conductor_nombre: req.usuario.nombre,
-        vehiculo_placa: asignacion.rows[0].vehiculo_placa
-      });
-    }
+    const { emitirAdmins } = require('../config/socket');
+    emitirAdmins('nueva_incidencia', {
+      ...r.rows[0],
+      conductor_nombre: req.usuario.nombre,
+      vehiculo_placa: asignacion.rows[0].vehiculo_placa
+    });
 
     res.status(201).json({ 
       incidencia: r.rows[0],
@@ -122,6 +103,5 @@ const crearIncidencia = async (req, res) => {
 
 module.exports = {
   obtenerIncidenciasActivas,
-  alargarJornada,
   crearIncidencia
 };

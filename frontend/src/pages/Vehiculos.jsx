@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { obtenerVehiculos, crearVehiculo, editarVehiculo } from '../services/api';
+import { obtenerVehiculos, crearVehiculo, editarVehiculo, eliminarVehiculo } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
 
 export default function Vehiculos() {
@@ -30,6 +30,18 @@ export default function Vehiculos() {
     setMostrarModal(true);
   };
 
+  const handleEliminar = async (id, placa) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar el vehículo "${placa}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+    try {
+      await eliminarVehiculo(id);
+      cargarDatos();
+    } catch (error) {
+      alert('❌ Error: ' + (error.response?.data?.mensaje || 'No se pudo eliminar el vehículo. Es posible que tenga registros asociados.'));
+    }
+  };
+
   const handleGuardar = async (e) => {
     e.preventDefault();
 
@@ -47,7 +59,10 @@ export default function Vehiculos() {
       if (editandoId) {
         await editarVehiculo(editandoId, {...form, placa: form.placa.toUpperCase()});
       } else {
-        await crearVehiculo({...form, placa: form.placa.toUpperCase()});
+        const res = await crearVehiculo({...form, placa: form.placa.toUpperCase()});
+        if (res.data?.mensaje) {
+          alert('✅ ' + res.data.mensaje);
+        }
       }
       setMostrarModal(false);
       cargarDatos();
@@ -61,7 +76,7 @@ export default function Vehiculos() {
     <AdminLayout>
       <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>
+           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--texto)' }}>
              <i className="bi bi-truck" style={{ marginRight: '12px', color: 'var(--color-primary)' }}></i>
              Gestión de Vehículos
            </h2>
@@ -93,10 +108,10 @@ export default function Vehiculos() {
                   </div>
                   <span style={{ fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '1px' }}>{v.placa}</span>
                </div>
-               <span style={{ fontSize: '14px', color: 'white' }}>{v.modelo}</span>
+               <span style={{ fontSize: '14px', color: 'var(--texto)' }}>{v.modelo}</span>
                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', color: 'white' }}>{v.capacidad_ton} Ton</span>
-                  <div style={{ flex: 1, height: '4px', background: '#333', borderRadius: '2px', minWidth: '60px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--texto)' }}>{v.capacidad_ton} Ton</span>
+                  <div style={{ flex: 1, height: '4px', background: 'var(--borde)', borderRadius: '2px', minWidth: '60px' }}>
                     <div style={{ width: `${Math.min((v.capacidad_ton/10)*100, 100)}%`, height: '100%', background: 'var(--color-primary)', borderRadius: '2px' }}></div>
                   </div>
                </div>
@@ -104,7 +119,7 @@ export default function Vehiculos() {
                   <button onClick={() => handleAbrirModal(v)} className="icon-btn" title="Editar">
                     <i className="bi bi-pencil-square"></i>
                   </button>
-                  <button className="icon-btn icon-btn-danger" title="Eliminar">
+                  <button onClick={() => handleEliminar(v.id, v.placa)} className="icon-btn icon-btn-danger" title="Eliminar" style={{ color: 'var(--color-danger)' }}>
                     <i className="bi bi-trash3-fill"></i>
                   </button>
                </div>
@@ -118,11 +133,11 @@ export default function Vehiculos() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="card" style={{ width: '460px', border: '1px solid var(--color-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '18px', color: 'white' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--texto)' }}>
                 <i className={`bi ${editandoId ? 'bi-pencil' : 'bi-truck'}`} style={{ marginRight: '10px', color: 'var(--color-primary)' }}></i>
                 {editandoId ? 'Editar Vehículo' : 'Nuevo Vehículo'}
               </h3>
-              <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '18px' }}>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', color: 'var(--texto)', cursor: 'pointer', fontSize: '18px' }}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -134,7 +149,7 @@ export default function Vehiculos() {
                   required 
                   value={form.placa} 
                   className="card" 
-                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px', letterSpacing: '2px', fontWeight: 700 }} 
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px', letterSpacing: '2px', fontWeight: 700 }} 
                   onChange={e => {
                     let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
                     if (val.length > 6) val = val.substring(0, 6);
@@ -159,11 +174,11 @@ export default function Vehiculos() {
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Modelo / Marca</label>
-                <input type="text" required value={form.modelo} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px' }} onChange={e => setForm({...form, modelo: e.target.value})} placeholder="Camión Compactador Kenworth" />
+                <input type="text" required value={form.modelo} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px' }} onChange={e => setForm({...form, modelo: e.target.value})} placeholder="Camión Compactador Kenworth" />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Capacidad de Carga (Toneladas)</label>
-                <input type="number" step="0.1" required value={form.capacidad_ton} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px' }} onChange={e => setForm({...form, capacidad_ton: e.target.value})} placeholder="5.5" />
+                <input type="number" step="0.1" required value={form.capacidad_ton} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px' }} onChange={e => setForm({...form, capacidad_ton: e.target.value})} placeholder="5.5" />
               </div>
               <button type="submit" className="btn btn-primary" style={{ padding: '14px', marginTop: '8px', fontWeight: 700 }}>
                 {editandoId ? 'Guardar Cambios' : 'Registrar Vehículo'}

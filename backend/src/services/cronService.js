@@ -1,6 +1,51 @@
 const pool = require('../config/database');
 const cron = require('node-cron');
 const { eliminarAsignacionesPorIds } = require('./dbCleanupService');
+const { crearNotificacion } = require('./notificacionService');
+
+/**
+ * Marca como no_asistido las asignaciones del día que nunca se iniciaron.
+ *
+ * RF-03.3 y RF-02.5 contemplan el estado no_asistido y el dashboard lo muestra,
+ * pero ningún proceso lo asignaba: una ruta que el conductor no arrancaba se
+ * quedaba en 'pendiente' para siempre y el indicador de inasistencia del
+ * dashboard era permanentemente cero.
+ *
+ * Se respeta habilitado_por_admin: si el administrador autorizó expresamente un
+ * inicio tardío, la asignación no se penaliza automáticamente.
+ */
+const marcarNoAsistidas = async () => {
+  try {
+    const res = await pool.query(
+      `UPDATE asignaciones_semanales a
+          SET estado = 'no_asistido'
+         FROM rutas_fijas rf
+         JOIN jornadas j ON j.id = rf.jornada_id
+        WHERE rf.id = a.ruta_fija_id
+          AND a.estado = 'pendiente'
+          AND a.habilitado_por_admin = FALSE
+          AND a.fecha = (NOW() AT TIME ZONE 'America/Bogota')::date
+          AND (NOW() AT TIME ZONE 'America/Bogota')::time
+              > (j.hora_inicio + make_interval(mins => j.margen_no_asistido_min))
+      RETURNING a.id, a.conductor_id, rf.nombre AS ruta_nombre`
+    );
+
+    if (res.rowCount === 0) return;
+
+    console.log(`⚠️ ${res.rowCount} asignación(es) marcadas como no asistidas.`);
+
+    for (const fila of res.rows) {
+      await crearNotificacion({
+        titulo: 'Ruta no asistida',
+        mensaje: `La ruta "${fila.ruta_nombre}" no fue iniciada dentro del margen permitido. Se requiere asignar un reemplazo.`,
+        tipo: 'urgente',
+        metadata: { asignacion_id: fila.id, tipo: 'NO_ASISTIDO' }
+      });
+    }
+  } catch (err) {
+    console.error('❌ Error marcando asignaciones no asistidas:', err.message);
+  }
+};
 
 const generarAsignaciones = async (fechaInicio = null) => {
   console.log('🕒 Iniciando generación de asignaciones optimizada (Bulk)...');
@@ -90,13 +135,16 @@ const generarAsignaciones = async (fechaInicio = null) => {
     let paramIndex = 1;
     
     for (const ea of expectedAssignments) {
-      valueClauses.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, 'pendiente')`);
-      params.push(ea.ruta_fija_id, ea.conductor_id, ea.fecha);
-      paramIndex += 3;
+      valueClauses.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, 'pendiente')`);
+      params.push(ea.ruta_fija_id, ea.conductor_id, ea.vehiculo_id, ea.fecha);
+      paramIndex += 4;
     }
     
+    // vehiculo_id se calculaba en expectedAssignments pero no se insertaba, de
+    // modo que toda asignacion nacia con el vehiculo en NULL y el sistema
+    // dependia de COALESCE contra la ruta fija en cada consulta posterior.
     const insertQuery = `
-      INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, fecha, estado)
+      INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
       VALUES ${valueClauses.join(', ')}
       ON CONFLICT (ruta_fija_id, fecha) DO NOTHING
       RETURNING id, ruta_fija_id
@@ -165,4 +213,31 @@ cron.schedule('0 2 * * *', async () => {
   }
 });
 
-module.exports = { generarAsignaciones };
+// Diariamente a las 3 AM: purgar notificaciones y auditoría antiguas.
+// Ninguna de las dos tablas tenía política de retención: crecían sin límite y
+// cada listado paginado ejecuta un COUNT(*) sobre la tabla completa.
+cron.schedule('0 3 * * *', async () => {
+  try {
+    // Retención de dos meses, leídas o no.
+    //
+    // Antes sólo se purgaban las leídas de más de noventa días, de modo que una
+    // notificación que nadie abrió se quedaba para siempre. La bitácora del
+    // panel muestra los últimos dos días y permite consultar por fecha dentro
+    // de esta ventana; más atrás no hay nada que consultar.
+    const notis = await pool.query(
+      "DELETE FROM notificaciones WHERE fecha < NOW() - INTERVAL '60 days'"
+    );
+    // La auditoría se conserva un año: es el registro de quién hizo qué.
+    const audit = await pool.query(
+      "DELETE FROM auditoria WHERE fecha < NOW() - INTERVAL '365 days'"
+    );
+    console.log(`🧹 Purga: ${notis.rowCount} notificaciones y ${audit.rowCount} registros de auditoría eliminados.`);
+  } catch (err) {
+    console.error('❌ Error en la purga periódica:', err.message);
+  }
+});
+
+// Cada 10 minutos: detectar rutas del dia que nunca se iniciaron.
+cron.schedule('*/10 * * * *', marcarNoAsistidas);
+
+module.exports = { generarAsignaciones, marcarNoAsistidas };

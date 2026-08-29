@@ -15,6 +15,7 @@ import Historial from './pages/Historial';
 import ReportesOperativos from './pages/ReportesOperativos';
 import PortalCiudadano from './pages/PortalCiudadano';
 import ConductorPanel from './pages/ConductorPanel';
+import RestablecerPassword from './pages/RestablecerPassword';
 
 export default function App() {
   return (
@@ -34,6 +35,9 @@ export default function App() {
           <Route path="/configuracion" element={<PrivateRoute rol="administrador"><Configuracion /></PrivateRoute>} />
           <Route path="/historial" element={<PrivateRoute rol="administrador"><Historial /></PrivateRoute>} />
           <Route path="/portal" element={<PortalCiudadano />} />
+          {/* Pública y común a los tres roles: el enlace del correo no sabe
+              quién lo abre, y quien lo abre no tiene sesión que iniciar. */}
+          <Route path="/restablecer" element={<RestablecerPassword />} />
           <Route path="/conductor" element={<PrivateRoute rol="conductor"><ConductorPanel /></PrivateRoute>} />
           <Route path="/" element={<Navigate to="/login" />} />
         </Routes>

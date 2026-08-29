@@ -5,13 +5,27 @@ const { getFechaColombia } = require('../utils/dateUtils');
 const {
   iniciarRuta, actualizarSector,
   registrarDescarga, completarDescarga, obtenerDescarga,
-  registrarGPS, reportarIncidencia, finalizarRuta
+  registrarGPS, finalizarRuta
 } = require('../controllers/conductorController');
 const { verificarToken, soloConductor } = require('../middlewares/authMiddleware');
 
+/**
+ * Comprueba que la asignación pertenezca al conductor autenticado.
+ * La pertenencia se valida contra asignaciones_semanales.conductor_id, que es la
+ * asignación real del día, y no contra rutas_fijas.conductor_default_id, que es
+ * sólo la configuración base y queda obsoleta tras un relevo (RNF-12).
+ */
+const asignacionEsDelConductor = async (asignacionId, conductorId) => {
+  const r = await pool.query(
+    'SELECT 1 FROM asignaciones_semanales WHERE id = $1 AND conductor_id = $2',
+    [asignacionId, conductorId]
+  );
+  return r.rows.length > 0;
+};
+
 // ── Perfil de Asignación ─────────────────────────────────────
 // Obtiene la asignación del día para el conductor (Usada por ConductorPanel.jsx)
-router.get('/mi-asignacion', verificarToken, async (req, res) => {
+router.get('/mi-asignacion', verificarToken, soloConductor, async (req, res) => {
   const conductorId = req.usuario.id;
   const fecha = req.query.fecha || getFechaColombia();
   try {
@@ -45,13 +59,16 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
               ) AS progreso_recorrido
        FROM asignaciones_semanales a
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-       JOIN vehiculos    v  ON v.id  = rf.vehiculo_id
+       JOIN vehiculos    v  ON v.id  = COALESCE(a.vehiculo_id, rf.vehiculo_id)
        JOIN jornadas     j  ON j.id  = rf.jornada_id
         WHERE a.conductor_id = $1 AND a.fecha = $2 AND a.estado IN ('pendiente', 'activa')
         ORDER BY 
           CASE 
             WHEN a.estado = 'activa' THEN 0
-            WHEN a.estado = 'pendiente' AND j.hora_limite_fin >= CURRENT_TIME THEN 1
+            -- CURRENT_TIME usa la zona del servidor; la operacion es en
+            -- Colombia. Con un servidor en UTC la jornada de la manana se
+            -- ordenaba como ya vencida a media manana.
+            WHEN a.estado = 'pendiente' AND j.hora_limite_fin >= (NOW() AT TIME ZONE 'America/Bogota')::time THEN 1
             ELSE 2
           END,
           j.hora_inicio ASC
@@ -81,9 +98,15 @@ router.get('/mi-asignacion', verificarToken, async (req, res) => {
 });
 
 // Obtiene paradas/sectores (Usada por ConductorPanel.jsx)
-router.get('/mis-paradas/:asignacionId', verificarToken, async (req, res) => {
+router.get('/mis-paradas/:asignacionId', verificarToken, soloConductor, async (req, res) => {
   const { asignacionId } = req.params;
   try {
+    // Sin esta comprobación cualquier sesión válida podía leer los sectores y el
+    // trazado georreferenciado de una asignación ajena indicando su id.
+    if (!(await asignacionEsDelConductor(asignacionId, req.usuario.id))) {
+      return res.status(403).json({ mensaje: 'No autorizado. Esta asignación no le pertenece.' });
+    }
+
     const r = await pool.query(
       `SELECT sa.id,
               sa.sector_id,
@@ -116,13 +139,12 @@ router.put('/asignacion/:id/finalizar', verificarToken, soloConductor, finalizar
 
 // ── Operación de Sectores ────────────────────────────────────
 // Actualizar progreso (Llama al controlador)
-router.put('/asignacion/:id/sector/:sectorId/progreso', verificarToken, actualizarSector);
+router.put('/asignacion/:id/sector/:sectorId/progreso', verificarToken, soloConductor, actualizarSector);
 
 // ── Descargas e Incidencias ──────────────────────────────────
-router.post('/asignacion/:id/descargas', verificarToken, registrarDescarga);
-router.get('/asignacion/:id/descargas/:descargaId', verificarToken, obtenerDescarga);
-router.put('/asignacion/:id/descargas/:descargaId/completar', verificarToken, completarDescarga);
-router.post('/asignacion/:id/incidencias', verificarToken, reportarIncidencia);
+router.post('/asignacion/:id/descargas', verificarToken, soloConductor, registrarDescarga);
+router.get('/asignacion/:id/descargas/:descargaId', verificarToken, soloConductor, obtenerDescarga);
+router.put('/asignacion/:id/descargas/:descargaId/completar', verificarToken, soloConductor, completarDescarga);
 
 // ── Telemetría ───────────────────────────────────────────────
 const rateLimit = require('express-rate-limit');
@@ -132,10 +154,10 @@ const gpsLimiter = rateLimit({
   message: { mensaje: 'Frecuencia de actualización de GPS excedida.' }
 });
 
-router.post('/asignacion/:id/gps', verificarToken, gpsLimiter, registrarGPS);
+router.post('/asignacion/:id/gps', verificarToken, soloConductor, gpsLimiter, registrarGPS);
 
 // ── Atender Reportes Ciudadanos por Conductor ───────────────
-router.put('/reporte/:reporteId/resolver', verificarToken, async (req, res) => {
+router.put('/reporte/:reporteId/resolver', verificarToken, soloConductor, async (req, res) => {
   const { reporteId } = req.params;
   const conductorId = req.usuario.id;
   try {
@@ -167,17 +189,17 @@ router.put('/reporte/:reporteId/resolver', verificarToken, async (req, res) => {
 
     const reporte = resultado.rows[0];
 
-    // 3. Notificar por Socket.io
-    const { getIo } = require('../config/socket');
-    const io = getIo();
-    if (io) {
-      io.emit('reporte_actualizado', reporte);
+    // 3. Notificar por Socket.io al panel del admin y al ciudadano autor
+    const { emitirAdmins, emitirUsuario } = require('../config/socket');
+    emitirAdmins('reporte_actualizado', reporte);
+    if (reporte.ciudadano_id) {
+      emitirUsuario(reporte.ciudadano_id, 'reporte_actualizado', reporte);
     }
 
     // 4. Crear una notificación de sistema para el Administrador
     const { crearNotificacion } = require('../services/notificacionService');
     await crearNotificacion({
-      titulo: '🗑️ Reporte Ciudadano Resuelto',
+      titulo: 'Reporte ciudadano resuelto',
       mensaje: `El conductor ha atendido y resuelto el reporte ciudadano #${reporte.id} (${reporte.tipo_problema}).`,
       tipo: 'operativo',
       metadata: { reporte_id: reporte.id, tipo: 'REPORTE_RESUELTO' }

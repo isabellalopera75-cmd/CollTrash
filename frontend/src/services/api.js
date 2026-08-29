@@ -40,8 +40,15 @@ export const login = (data) => API.post('/auth/login', data);
 export const registrarCiudadano = (data) => API.post('/auth/registrar-ciudadano', data);
 export const registrarConductor = (data) => API.post('/auth/registrar-conductor', data);
 export const editarConductor = (id, data) => API.put(`/auth/conductor/${id}`, data);
+export const eliminarConductor = (id) => API.delete(`/auth/conductor/${id}`);
 export const obtenerPerfil = () => API.get('/auth/perfil');
 export const verificarCorreo = (email) => API.get(`/auth/verificar-correo?email=${email}`);
+
+// Recuperación de contraseña. Las tres son públicas: quien las usa es
+// precisamente alguien que no puede iniciar sesión.
+export const solicitarRecuperacion = (email) => API.post('/auth/recuperar-password', { email });
+export const verificarTokenRecuperacion = (token) => API.get(`/auth/verificar-token-recuperacion?token=${encodeURIComponent(token)}`);
+export const restablecerPassword = (datos) => API.post('/auth/restablecer-password', datos);
 
 // Rutas
 export const obtenerRutas = () => API.get('/rutas');
@@ -58,6 +65,7 @@ export const eliminarPuntoDescarga = (id) => API.delete(`/puntos-descarga/${id}`
 export const obtenerVehiculos = () => API.get('/rutas/vehiculos');
 export const crearVehiculo = (data) => API.post('/rutas/vehiculos', data);
 export const editarVehiculo = (id, data) => API.put(`/rutas/vehiculos/${id}`, data);
+export const eliminarVehiculo = (id) => API.delete(`/rutas/vehiculos/${id}`);
 export const obtenerJornadas = () => API.get('/rutas/jornadas');
 export const crearJornada = (data) => API.post('/rutas/jornadas', data);
 export const editarJornada = (id, data) => API.put(`/rutas/jornadas/${id}`, data);
@@ -67,12 +75,13 @@ export const reasignarAsignacion = (id, data) => API.put(`/asignaciones/${id}/re
 export const obtenerAsignacionesDisponibles = () => API.get('/asignaciones/disponibles');
 
 // Reportes ciudadanos
-export const obtenerReportes = () => API.get('/reportes');
+// El limite es explicito: el panel necesita tener cargado el reporte al que
+// apunta una notificacion, y la respuesta viene paginada de 20 en 20.
+export const obtenerReportes = (limite = 20) => API.get(`/reportes?limite=${limite}`);
 export const obtenerReportesCiudadanos = () => API.get('/reportes');
 export const obtenerMisReportes = () => API.get('/reportes/mis-reportes');
 export const actualizarEstadoReporte = (id, data) => API.put(`/reportes/${id}/estado`, data);
-export const atenderReporte = (id, data) => API.put(`/reportes/${id}/atender`, data);
-export const rechazarReporte = (id, data) => API.put(`/reportes/${id}/rechazar`, data);
+
 export const crearReporteCiudadano = (data) => API.post('/reportes', data, {
   headers: { 'Content-Type': 'multipart/form-data' }
 });

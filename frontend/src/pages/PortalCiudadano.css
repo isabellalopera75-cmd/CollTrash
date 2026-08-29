@@ -1,47 +1,45 @@
-:root {
-  --pc-primary: #4a7c59;
-  --pc-bg-background: #080c0a;
-  --pc-bg-card: transparent;
-  --pc-border: #1a2028;
-  --pc-text-foreground: #ffffff;
-  --pc-text-muted: #5a5f5c;
-  --pc-status-danger: #ef4444;
-  --pc-status-warning: #f59e0b;
-  --pc-status-success: #10b981;
-}
+/* ============================================================================
+   Portal ciudadano
+   ----------------------------------------------------------------------------
+   Superficie clara, pensada para el teléfono y para leerse en la calle.
+   Toda la paleta procede de styles/tokens.css; este archivo no define colores
+   propios. En pantallas anchas el contenido se presenta dentro de un marco
+   centrado; en el teléfono ocupa la pantalla completa.
+   ========================================================================== */
 
 .pc-wrapper {
-  min-height: 100vh;
-  width: 100vw;
-  background-color: #05070A;
+  min-height: 100dvh;
+  width: 100%;
+  background: var(--superficie-2);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: var(--e-4);
   box-sizing: border-box;
 }
 
 .pc-container {
   width: 100%;
   max-width: 430px;
-  height: calc(100vh - 32px);
+  height: calc(100dvh - 2rem);
   max-height: 920px;
-  background-color: var(--pc-bg-background);
-  color: var(--pc-text-foreground);
-  font-family: 'Inter', sans-serif;
+  background-color: var(--fondo);
+  color: var(--texto);
+  font-family: var(--f-texto);
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--pc-border);
-  border-radius: 32px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 50px rgba(0, 255, 157, 0.08);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-xl);
+  box-shadow: var(--sombra-3);
 }
 
 @media (max-width: 1024px) {
   .pc-wrapper {
     padding: 0;
-    background-color: var(--pc-bg-background);
+    background-color: var(--fondo);
+    align-items: stretch;
   }
   .pc-container {
     max-width: 100%;
@@ -53,411 +51,452 @@
   }
 }
 
-/* Custom Sleek Scrollbar */
-.pc-wrapper *::-webkit-scrollbar {
-  width: 4px;
-}
-.pc-wrapper *::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* ── Barra de desplazamiento discreta ──────────────────────────────────── */
+.pc-wrapper *::-webkit-scrollbar { width: 5px; }
+.pc-wrapper *::-webkit-scrollbar-track { background: transparent; }
 .pc-wrapper *::-webkit-scrollbar-thumb {
-  background: var(--pc-border);
-  border-radius: 4px;
+  background: var(--borde-fuerte);
+  border-radius: var(--r-full);
 }
-.pc-wrapper *::-webkit-scrollbar-thumb:hover {
-  background: #333C4D;
-}
+.pc-wrapper *::-webkit-scrollbar-thumb:hover { background: var(--texto-3); }
 
+/* ── Contenedores ──────────────────────────────────────────────────────── */
 .pc-centered {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: var(--e-5);
   width: 100%;
   box-sizing: border-box;
 }
 
 .pc-content {
-  padding: 24px;
+  padding: var(--e-5);
   width: 100%;
-  padding-bottom: 90px;
+  /* Espacio para que la barra inferior no tape el último elemento. */
+  padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
 }
 
 .pc-card {
-  background-color: var(--pc-bg-card);
-  border: 1px solid var(--pc-border);
-  border-radius: 16px;
-  padding: 16px;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-lg);
+  padding: var(--e-4);
   width: 100%;
   box-sizing: border-box;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  box-shadow: var(--sombra-1);
+  transition: border-color .2s ease, box-shadow .2s ease;
 }
 .pc-card:hover {
-  border-color: rgba(0, 255, 157, 0.3);
+  border-color: var(--marca-borde);
+  box-shadow: var(--sombra-2);
 }
 
 .pc-card-sm {
-  padding: 14px;
-  border-radius: 14px;
+  padding: var(--e-3);
+  border-radius: var(--r-md);
 }
 
+/* ── Tipografía ────────────────────────────────────────────────────────── */
 .pc-title {
-  font-size: 24px;
+  font-size: var(--t-2xl);
   font-weight: 700;
-  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: var(--e-2);
   text-align: center;
-  color: var(--pc-text-foreground);
+  color: var(--texto);
+  text-wrap: balance;
 }
 
 .pc-subtitle {
-  font-size: 14px;
-  color: var(--pc-text-muted);
+  font-size: var(--t-md);
+  color: var(--texto-2);
   text-align: center;
-  margin-bottom: 24px;
-  line-height: 1.4;
+  margin-bottom: var(--e-5);
+  line-height: 1.55;
 }
 
+/* ── Botones ───────────────────────────────────────────────────────────── */
 .pc-btn-primary {
   width: 100%;
-  background-color: var(--pc-primary);
-  color: #0A0D14;
+  min-height: var(--toque);
+  background-color: var(--marca);
+  color: var(--marca-contraste);
   border: none;
-  border-radius: 14px;
-  padding: 16px;
-  font-weight: 700;
-  font-size: 15px;
+  border-radius: var(--r-md);
+  padding: var(--e-4);
+  font-family: inherit;
+  font-weight: 650;
+  font-size: var(--t-base);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--e-2);
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 255, 157, 0.25);
-  transition: opacity 0.2s, transform 0.1s;
+  box-shadow: var(--sombra-1);
+  transition: background-color .2s, transform .08s, box-shadow .2s;
 }
 .pc-btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  background-color: var(--marca-hover);
+  box-shadow: var(--sombra-2);
 }
-.pc-btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
+.pc-btn-primary:active:not(:disabled) { transform: translateY(1px); }
 .pc-btn-primary:disabled {
-  opacity: 0.5;
+  opacity: .45;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .pc-btn-secondary {
   width: 100%;
-  background-color: var(--pc-bg-card);
-  color: var(--pc-text-foreground);
-  border: 1px solid var(--pc-border);
-  border-radius: 14px;
-  padding: 16px;
+  min-height: var(--toque);
+  background-color: var(--superficie);
+  color: var(--texto);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--r-md);
+  padding: var(--e-4);
+  font-family: inherit;
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-base);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--e-2);
   cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
+  transition: background-color .2s, border-color .2s;
 }
 .pc-btn-secondary:hover {
-  background-color: #1A202E;
-  border-color: #333D52;
+  background-color: var(--superficie-2);
+  border-color: var(--texto-3);
 }
 
+/* ── Campos de formulario ──────────────────────────────────────────────── */
+.pc-input,
+.pc-textarea {
+  width: 100%;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  color: var(--texto);
+  border-radius: var(--r-md);
+  font-family: inherit;
+  /* 16px evita que Safari en iOS haga zoom al enfocar el campo. */
+  font-size: var(--t-base);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color .2s, box-shadow .2s;
+}
 
 .pc-input {
-  width: 100%;
-  background-color: var(--pc-bg-card);
-  border: 1px solid var(--pc-border);
-  color: var(--pc-text-foreground);
-  border-radius: 12px;
-  padding: 14px 14px 14px 44px;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
-  box-sizing: border-box;
+  min-height: var(--toque);
+  padding: var(--e-3) var(--e-3) var(--e-3) 2.75rem;
 }
 
-.pc-input:focus {
-  border-color: var(--pc-primary);
+.pc-textarea {
+  padding: var(--e-3);
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.5;
 }
+
+.pc-input:focus,
+.pc-textarea:focus {
+  border-color: var(--marca);
+  box-shadow: var(--anillo);
+}
+
+.pc-input::placeholder,
+.pc-textarea::placeholder { color: var(--texto-3); }
 
 .pc-input-wrapper {
   position: relative;
   width: 100%;
-  margin-bottom: 16px;
+  margin-bottom: var(--e-4);
 }
 
 .pc-input-icon {
   position: absolute;
-  left: 14px;
+  left: var(--e-3);
   top: 50%;
   transform: translateY(-50%);
-  color: var(--pc-text-muted);
-}
-
-.pc-textarea {
-  width: 100%;
-  background-color: var(--pc-bg-card);
-  border: 1px solid var(--pc-border);
-  color: var(--pc-text-foreground);
-  border-radius: 12px;
-  padding: 14px;
-  font-size: 14px;
-  outline: none;
-  resize: none;
-  min-height: 80px;
-  box-sizing: border-box;
-  transition: border-color 0.2s;
-}
-
-.pc-textarea:focus {
-  border-color: var(--pc-primary);
+  color: var(--texto-3);
+  pointer-events: none;
 }
 
 .pc-label {
   display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pc-text-muted);
-  margin-bottom: 8px;
+  font-size: var(--t-xs);
+  font-weight: 650;
+  color: var(--texto-2);
+  margin-bottom: var(--e-2);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: .06em;
 }
 
+/* ── Selección de opciones ─────────────────────────────────────────────── */
 .pc-radio-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--pc-border);
-  border-radius: 14px;
-  margin-bottom: 10px;
+  gap: var(--e-3);
+  min-height: var(--toque);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--r-md);
+  margin-bottom: var(--e-2);
   cursor: pointer;
-  background-color: var(--pc-bg-card);
-  transition: all 0.2s ease;
+  background-color: var(--superficie);
+  transition: border-color .2s, background-color .2s;
   box-sizing: border-box;
 }
+.pc-radio-item:hover { border-color: var(--texto-3); }
 
 .pc-radio-item.active {
-  border-color: var(--pc-primary);
-  background-color: rgba(0, 255, 157, 0.08);
+  border-color: var(--marca);
+  background-color: var(--marca-suave);
 }
 
 .pc-radio-circle {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
   border-radius: 50%;
-  border: 2px solid var(--pc-text-muted);
+  border: 2px solid var(--borde-fuerte);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.2s;
+  transition: border-color .2s;
 }
-
-.pc-radio-item.active .pc-radio-circle {
-  border-color: var(--pc-primary);
-}
+.pc-radio-item.active .pc-radio-circle { border-color: var(--marca); }
 
 .pc-radio-dot {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background-color: transparent;
-  transition: background-color 0.2s;
+  transition: background-color .2s;
 }
+.pc-radio-item.active .pc-radio-dot { background-color: var(--marca); }
 
-.pc-radio-item.active .pc-radio-dot {
-  background-color: var(--pc-primary);
-}
-
+/* ── Barra de navegación inferior ──────────────────────────────────────── */
 .pc-bottom-nav {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 100%;
-  background-color: rgba(10, 13, 20, 0.95);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid var(--pc-border);
+  background-color: var(--superficie);
+  border-top: 1px solid var(--borde);
   display: flex;
   z-index: 50;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -1px 3px rgba(23, 30, 23, .05);
 }
 
 .pc-nav-item {
   flex: 1;
+  min-height: var(--toque);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 14px 0;
-  color: var(--pc-text-muted);
-  font-size: 11px;
+  padding: var(--e-3) 0;
+  color: var(--texto-3);
+  font-size: var(--t-xs);
   font-weight: 600;
   cursor: pointer;
   border-top: 2px solid transparent;
-  gap: 5px;
-  transition: all 0.2s;
+  gap: var(--e-1);
+  transition: color .2s, border-color .2s;
 }
-
-.pc-nav-item:hover {
-  color: var(--pc-text-foreground);
-}
-
+.pc-nav-item:hover { color: var(--texto); }
 .pc-nav-item.active {
-  color: var(--pc-primary);
-  border-top-color: var(--pc-primary);
+  color: var(--marca);
+  border-top-color: var(--marca);
 }
 
-/* Animations */
-@keyframes pc-pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.6); opacity: 0; }
-  100% { transform: scale(1); opacity: 0; }
-}
-.animate-ping-custom {
-  animation: pc-pulse 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-@keyframes pc-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-.animate-spin-custom {
-  animation: pc-spin 1s linear infinite;
-}
-
-/* Helpers */
-.pc-flex-center { display: flex; align-items: center; justify-content: center; }
-.pc-flex-between { display: flex; align-items: center; justify-content: space-between; }
-.pc-gap-2 { gap: 8px; }
-.pc-gap-3 { gap: 12px; }
-.pc-gap-4 { gap: 16px; }
-.pc-mt-4 { margin-top: 16px; }
-.pc-mb-4 { margin-bottom: 16px; }
-.pc-mb-2 { margin-bottom: 8px; }
-.pc-text-sm { font-size: 14px; }
-.pc-text-xs { font-size: 12px; }
-.pc-text-muted { color: var(--pc-text-muted); }
-
+/* ── Alternadores y distintivos ────────────────────────────────────────── */
 .pc-toggle-btn {
   flex: 1;
-  padding: 14px;
-  border: 1px solid var(--pc-border);
-  background-color: var(--pc-bg-card);
-  color: var(--pc-text-muted);
-  border-radius: 12px;
-  font-size: 13px;
+  min-height: var(--toque);
+  padding: var(--e-3);
+  border: 1px solid var(--borde-fuerte);
+  background-color: var(--superficie);
+  color: var(--texto-2);
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--t-md);
   font-weight: 600;
   cursor: pointer;
   text-align: center;
-  transition: all 0.2s;
+  transition: border-color .2s, background-color .2s, color .2s;
 }
-.pc-toggle-btn:hover {
-  border-color: #333D52;
-}
+.pc-toggle-btn:hover { border-color: var(--texto-3); }
 .pc-toggle-btn.active {
-  border-color: var(--pc-primary);
-  background-color: rgba(0, 255, 157, 0.08);
-  color: var(--pc-primary);
+  border-color: var(--marca);
+  background-color: var(--marca-suave);
+  color: var(--marca);
 }
 
 .pc-badge {
-  padding: 6px 10px;
-  border-radius: 12px;
-  font-size: 11px;
+  display: inline-block;
+  padding: var(--e-1) var(--e-2);
+  border-radius: var(--r-full);
+  font-size: var(--t-xs);
   font-weight: 700;
+  letter-spacing: .01em;
 }
-.pc-badge-primary { background: rgba(0, 255, 157, 0.15); color: var(--pc-primary); }
-.pc-badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--pc-status-warning); }
-.pc-badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--pc-status-danger); }
+.pc-badge-primary { background: var(--marca-suave);   color: var(--marca); }
+.pc-badge-warning { background: var(--alerta-suave);  color: var(--alerta); }
+.pc-badge-danger  { background: var(--peligro-suave); color: var(--peligro); }
+.pc-badge-success { background: var(--exito-suave);   color: var(--exito); }
 
-/* Override browser autofill to maintain dark theme */
-.transparent-input:-webkit-autofill,
-.transparent-input:-webkit-autofill:hover,
-.transparent-input:-webkit-autofill:focus,
-.transparent-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px #080c0a inset !important;
-  -webkit-text-fill-color: white !important;
-  transition: background-color 5000s ease-in-out 0s;
+/* El autocompletado del navegador se trata en styles/tokens.css. */
+
+
+/* ── Animaciones ───────────────────────────────────────────────────────── */
+@keyframes pc-pulse {
+  0%   { transform: scale(1);   opacity: 1; }
+  50%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1);   opacity: 0; }
+}
+.animate-ping-custom { animation: pc-pulse 1.5s cubic-bezier(0, 0, .2, 1) infinite; }
+
+@keyframes pc-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.animate-spin-custom { animation: pc-spin 1s linear infinite; }
+
+/* ── Utilidades ────────────────────────────────────────────────────────── */
+.pc-flex-center  { display: flex; align-items: center; justify-content: center; }
+.pc-flex-between { display: flex; align-items: center; justify-content: space-between; }
+.pc-gap-2 { gap: var(--e-2); }
+.pc-gap-3 { gap: var(--e-3); }
+.pc-gap-4 { gap: var(--e-4); }
+.pc-mt-4  { margin-top: var(--e-4); }
+.pc-mb-4  { margin-bottom: var(--e-4); }
+.pc-mb-2  { margin-bottom: var(--e-2); }
+.pc-text-sm { font-size: var(--t-md); }
+.pc-text-xs { font-size: var(--t-xs); }
+.pc-text-muted { color: var(--texto-2); }
+
+/* ── Pantalla de bienvenida ────────────────────────────────────────────── */
+/*
+   La pantalla de acceso se comporta distinto según el tamaño:
+
+     Teléfono   El bloque de marca y el formulario se apilan y suman más alto
+                que la pantalla, así que se desplaza la PÁGINA entera.
+     Escritorio Las dos columnas caben una al lado de otra: la pantalla queda
+                fija y, si algún panel se queda corto de sitio, se desplaza ese
+                panel por dentro. Sin esto, en una ventana ancha pero baja
+                aparecía una barra de desplazamiento general por unas decenas
+                de píxeles, que es justo lo que no debe pasar en una portada.
+*/
+.pc-onboarding-wrapper {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--f-texto);
 }
 
-/* Onboarding Grid */
+@media (min-width: 1025px) {
+  .pc-onboarding-wrapper {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Cada columna resuelve su propio exceso; nada queda inalcanzable. */
+  .pc-left-panel { overflow-y: auto; }
+}
 .pc-onboarding-grid {
   display: grid;
   grid-template-columns: 1fr 520px;
   flex: 1;
+  min-height: 0;
 }
 
 .pc-left-panel {
-  border-right: 1px solid rgba(255,255,255,0.05);
-  padding: 40px;
+  border-right: 1px solid var(--borde);
+  background: var(--superficie-2);
+  padding: var(--e-7);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 
 .pc-right-panel {
-  padding: 48px;
+  padding: var(--e-7);
   display: flex;
   flex-direction: column;
   justify-content: center;
   position: relative;
+  overflow-y: auto;
 }
 
 .pc-hero-text {
-  font-size: 8.5vw;
+  /* Con tope: a 1920px pedia 163px de cuerpo y desbordaba a lo alto. */
+  font-size: clamp(3rem, 8.5vw, 7.5rem);
+  color: var(--marca);
+  letter-spacing: -0.04em;
+  line-height: .88;
 }
 
 @media (max-width: 1024px) {
+  /* En una sola columna las dos filas se apilan y suman mas alto que la
+     pantalla. Con min-height:0 la rejilla se comprimia hasta el hueco libre y
+     su contenido sobresalia sin poder alcanzarse: solo se desplazaba el panel
+     derecho, que ademas ocupaba menos de media pantalla. Aqui la rejilla toma
+     su altura natural y quien se desplaza es la pagina. */
   .pc-onboarding-grid {
     grid-template-columns: 1fr;
+    min-height: auto;
   }
-  
+
   .pc-left-panel {
     border-right: none;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    padding: 32px 24px;
-    gap: 40px;
+    border-bottom: 1px solid var(--borde);
+    padding: var(--e-5) var(--e-4);
+    gap: var(--e-5);
     text-align: center;
   }
-  
+
   .pc-left-content {
     display: flex;
     flex-direction: column;
     align-items: center;
   }
 
-  .pc-divider-line {
-    margin-left: auto;
-    margin-right: auto;
-  }
+  .pc-divider-line { margin-left: auto; margin-right: auto; }
+  .pc-features-list { align-items: center; }
+  .pc-left-footer { justify-content: center !important; gap: var(--e-5); }
 
-  .pc-features-list {
-    align-items: center;
-  }
+  .pc-hero-text { font-size: clamp(3.5rem, 16vw, 7rem); }
 
-  .pc-left-footer {
-    justify-content: center !important;
-    gap: 24px;
-  }
-  
-  .pc-hero-text {
-    font-size: clamp(5rem, 18vw, 10rem);
-  }
-  
+  /* Sin scroll propio: el panel deja de ser una ventana independiente dentro
+     de la pagina y se desplaza junto con el resto. */
   .pc-right-panel {
-    padding: 32px 24px;
+    padding: var(--e-5) var(--e-4);
+    overflow-y: visible;
   }
 }
 
+/* Teléfonos estrechos: se recupera espacio horizontal. */
+@media (max-width: 380px) {
+  .pc-content, .pc-centered { padding-left: var(--e-4); padding-right: var(--e-4); }
+  .pc-title { font-size: var(--t-xl); }
+}
 
+/* ── Campos de la pantalla de acceso ───────────────────────────────────── */
+/* Estos campos llevan sus estilos en línea, que tienen prioridad sobre la
+   hoja. Se fuerzan aquí las dos propiedades que afectan a la usabilidad en
+   el teléfono: la altura táctil mínima y un tamaño de fuente de 16px, por
+   debajo del cual Safari en iOS amplía la página al enfocar el campo. */
+.transparent-input {
+  min-height: var(--toque);
+  font-size: var(--t-base) !important;
+}

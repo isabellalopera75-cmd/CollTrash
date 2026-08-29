@@ -122,11 +122,11 @@ export default function Rutas() {
     <AdminLayout>
       <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>Gestión Semanal</h2>
+           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--texto)' }}>Gestión Semanal</h2>
            <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Calendario de rutas y asignaciones de la semana</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-           <button className="btn" style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid #333' }}>
+           <button className="btn" style={{ background: 'var(--borde)', color: 'var(--texto)', border: '1px solid var(--borde)' }}>
              <i className="bi bi-calendar3" style={{ marginRight: '8px' }}></i>
              Semana del {diasVista[0].getDate()} al {diasVista[5].getDate()} de {diasVista[0].toLocaleDateString('es-ES', { month: 'long' })}
            </button>
@@ -158,12 +158,12 @@ export default function Rutas() {
                 transition: 'all 0.2s ease'
               }}
             >
-              <div style={{ fontSize: '12px', color: activo ? 'white' : 'var(--text-muted)', textTransform: 'capitalize' }}>
+              <div style={{ fontSize: '12px', color: activo ? 'var(--texto)' : 'var(--text-muted)', textTransform: 'capitalize' }}>
                 {d.toLocaleDateString('es-ES', { weekday: 'short' })} {d.getDate()}
               </div>
               <div style={{ fontSize: '11px', color: activo ? 'var(--color-primary)' : 'var(--text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
                 {conteos[iso] || 0} {(conteos[iso] === 1) ? 'ruta' : 'rutas'} 
-                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: activo ? 'var(--color-primary)' : '#444' }}></div>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: activo ? 'var(--color-primary)' : 'var(--borde-fuerte)' }}></div>
               </div>
             </div>
           );
@@ -172,15 +172,15 @@ export default function Rutas() {
 
       {/* Filtros de Estado */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '25px' }}>
-         <button className="btn" style={{ background: stats.enCurso > 0 ? 'rgba(0, 255, 157, 0.1)' : 'rgba(255,255,255,0.05)', color: stats.enCurso > 0 ? 'var(--color-primary)' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.enCurso > 0 ? '1px solid rgba(0, 255, 157, 0.2)' : '1px solid #333' }}>
+         <button className="btn" style={{ background: stats.enCurso > 0 ? 'var(--marca-suave)' : 'var(--borde)', color: stats.enCurso > 0 ? 'var(--color-primary)' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.enCurso > 0 ? '1px solid rgba(0, 255, 157, 0.2)' : '1px solid var(--borde)' }}>
            <i className="bi bi-truck" style={{ marginRight: '8px' }}></i>
            {stats.enCurso} En curso
          </button>
-         <button className="btn" style={{ background: stats.pendientes > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.05)', color: stats.pendientes > 0 ? 'var(--color-accent)' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.pendientes > 0 ? '1px solid rgba(245, 158, 11, 0.2)' : '1px solid #333' }}>
+         <button className="btn" style={{ background: stats.pendientes > 0 ? 'var(--alerta-suave)' : 'var(--borde)', color: stats.pendientes > 0 ? 'var(--color-accent)' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.pendientes > 0 ? '1px solid rgba(245, 158, 11, 0.2)' : '1px solid var(--borde)' }}>
            <i className="bi bi-clock" style={{ marginRight: '8px' }}></i>
            {stats.pendientes} Pendientes
          </button>
-         <button className="btn" style={{ background: stats.completadas > 0 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.05)', color: stats.completadas > 0 ? '#3b82f6' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.completadas > 0 ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid #333' }}>
+         <button className="btn" style={{ background: stats.completadas > 0 ? 'var(--info-suave)' : 'var(--borde)', color: stats.completadas > 0 ? 'var(--info)' : 'var(--text-muted)', fontSize: '12px', borderRadius: '20px', padding: '5px 15px', border: stats.completadas > 0 ? '1px solid var(--info)' : '1px solid var(--borde)' }}>
            <i className="bi bi-check2-all" style={{ marginRight: '8px' }}></i>
            {stats.completadas} Completadas
          </button>
@@ -223,9 +223,9 @@ export default function Rutas() {
               <div key={a.id} className="data-table-row" style={{ gridTemplateColumns: '2fr 2fr 1.5fr', padding: '25px 20px' }}>
                 {/* Columna Ruta y Progreso */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                   <div style={{ fontWeight: 600, fontSize: '15px', color: 'white' }}>{a.ruta_nombre}</div>
+                   <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--texto)' }}>{a.ruta_nombre}</div>
                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ flex: 1, height: '6px', background: '#222', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, height: '6px', background: 'var(--superficie-2)', borderRadius: '3px', overflow: 'hidden' }}>
                          <div style={{ width: (a.progreso || 0) + '%', height: '100%', background: 'var(--color-primary)', boxShadow: '0 0 10px var(--color-primary)' }}></div>
                       </div>
                       <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{a.progreso || 0}%</span>
@@ -234,11 +234,11 @@ export default function Rutas() {
 
                 {/* Columna Conductor y Vehículo */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                   <div className="logo-circle" style={{ width: '40px', height: '40px', background: 'rgba(255,255,255,0.03)', color: '#888' }}>
+                   <div className="logo-circle" style={{ width: '40px', height: '40px', background: 'var(--superficie-2)', color: 'var(--texto-3)' }}>
                      <i className="bi bi-person-circle" style={{ fontSize: '20px' }}></i>
                    </div>
                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'white' }}>{a.conductor_nombre}</div>
+                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--texto)' }}>{a.conductor_nombre}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{a.vehiculo_placa}</div>
                    </div>
                 </div>
@@ -248,7 +248,7 @@ export default function Rutas() {
                    <span style={{ fontSize: '10px', padding: '4px 10px', borderRadius: '4px', background: 'rgba(255, 165, 0, 0.1)', color: 'orange', fontWeight: 700 }}>
                      TURNO {a.jornada_nombre?.toUpperCase()}
                    </span>
-                   <span className={`status-badge ${esExpirado ? '' : getStatusClass(a.estado)}`} style={{ fontSize: '10px', padding: '5px 12px', ...(esExpirado ? { color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.1)' } : (a.estado === 'incompleta' ? { color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.1)' } : {})) }}>
+                   <span className={`status-badge ${esExpirado ? '' : getStatusClass(a.estado)}`} style={{ fontSize: '10px', padding: '5px 12px', ...(esExpirado ? { color: 'var(--peligro)', border: '1px solid var(--peligro)', background: 'var(--peligro-suave)' } : (a.estado === 'incompleta' ? { color: 'var(--peligro)', border: '1px solid var(--peligro)', background: 'var(--peligro-suave)' } : {})) }}>
                      <i className={`bi ${esExpirado ? 'bi-x-circle-fill' : getStatusIcon(a.estado)}`} style={{ marginRight: '6px' }}></i>
                      {esExpirado ? 'Expirado' : (a.estado === 'pendiente' ? 'Pendiente' : (a.estado === 'activa' ? 'En curso' : (a.estado === 'incompleta' ? 'Detenida' : 'Completado')))}
                    </span>
@@ -260,7 +260,7 @@ export default function Rutas() {
                            <button 
                              onClick={() => !deshabilitado && abrirModalReasignar(a)} 
                              className="btn" 
-                             style={{ padding: '6px', background: 'none', color: deshabilitado ? '#333' : '#666', cursor: deshabilitado ? 'not-allowed' : 'pointer', opacity: deshabilitado ? 0.4 : 1 }} 
+                             style={{ padding: '6px', background: 'none', color: deshabilitado ? 'var(--borde)' : 'var(--texto-3)', cursor: deshabilitado ? 'not-allowed' : 'pointer', opacity: deshabilitado ? 0.4 : 1 }} 
                              title={jornadaTerminada ? 'Jornada finalizada' : (!puedeReasignar ? 'Solo se puede reasignar rutas pendientes' : 'Reasignar')}
                              disabled={deshabilitado}
                            >
@@ -310,15 +310,15 @@ export default function Rutas() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="card" style={{ width: '400px', border: '1px solid var(--color-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', color: 'white' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--texto)' }}>
                 <i className="bi bi-arrow-left-right" style={{ marginRight: '10px', color: 'var(--color-primary)' }}></i>
                 Reasignar Turno
               </h3>
-              <button onClick={() => setModalReasignar(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><i className="bi bi-x-lg"></i></button>
+              <button onClick={() => setModalReasignar(false)} style={{ background: 'none', border: 'none', color: 'var(--texto)', cursor: 'pointer' }}><i className="bi bi-x-lg"></i></button>
             </div>
             
             <div style={{ marginBottom: '20px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              Ruta: <strong style={{ color: 'white' }}>{asigAReasignar?.ruta_nombre}</strong> <br/>
+              Ruta: <strong style={{ color: 'var(--texto)' }}>{asigAReasignar?.ruta_nombre}</strong> <br/>
               Fecha: {fechaSeleccionada} ({asigAReasignar?.jornada_nombre})
             </div>
 
@@ -326,7 +326,7 @@ export default function Rutas() {
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>Nuevo Conductor</label>
                 <select 
-                  className="card" style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', padding: '10px' }}
+                  className="card" style={{ width: '100%', background: 'var(--bg-secondary)', color: 'var(--texto)', padding: '10px' }}
                   value={formReasignar.conductor_id}
                   onChange={(e) => setFormReasignar({...formReasignar, conductor_id: e.target.value})}
                   required
@@ -339,7 +339,7 @@ export default function Rutas() {
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>Vehículo de Reemplazo</label>
                 <select 
-                  className="card" style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', padding: '10px' }}
+                  className="card" style={{ width: '100%', background: 'var(--bg-secondary)', color: 'var(--texto)', padding: '10px' }}
                   value={formReasignar.vehiculo_id}
                   onChange={(e) => setFormReasignar({...formReasignar, vehiculo_id: e.target.value})}
                   required
@@ -354,7 +354,7 @@ export default function Rutas() {
                 <input 
                   type="text"
                   placeholder="Ej: Permiso médico, falla mecánica..."
-                  className="card" style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', padding: '10px', border: 'none' }}
+                  className="card" style={{ width: '100%', background: 'var(--bg-secondary)', color: 'var(--texto)', padding: '10px', border: 'none' }}
                   value={formReasignar.motivo || ''}
                   onChange={(e) => setFormReasignar({...formReasignar, motivo: e.target.value})}
                   required
@@ -374,7 +374,7 @@ export default function Rutas() {
       {modalReactivar && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="card" style={{ width: '400px', border: '1px solid var(--color-warning)' }}>
-             <h3 style={{ fontSize: '18px', color: 'white', marginBottom: '15px' }}>
+             <h3 style={{ fontSize: '18px', color: 'var(--texto)', marginBottom: '15px' }}>
                <i className="bi bi-lightning-charge-fill" style={{ color: 'var(--color-warning)', marginRight: '10px' }}></i>
                Reactivar Inicio de Ruta
              </h3>
@@ -384,14 +384,14 @@ export default function Rutas() {
              </p>
              <textarea 
                className="card" 
-               style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', color: 'white', minHeight: '80px', border: 'none', marginBottom: '20px' }}
+               style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', color: 'var(--texto)', minHeight: '80px', border: 'none', marginBottom: '20px' }}
                placeholder="Ej: Justificación comunicada vía telefónica..."
                value={motivoReactivar}
                onChange={e => setMotivoReactivar(e.target.value)}
              />
              <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={() => setModalReactivar(false)} className="btn" style={{ flex: 1 }}>Cancelar</button>
-                <button onClick={handleHabilitarTarde} className="btn btn-primary" style={{ flex: 1, background: 'var(--color-warning)', color: '#000' }}>Confirmar Habilitación</button>
+                <button onClick={handleHabilitarTarde} className="btn btn-primary" style={{ flex: 1, background: 'var(--color-warning)', color: 'var(--marca-contraste)' }}>Confirmar Habilitación</button>
              </div>
           </div>
         </div>

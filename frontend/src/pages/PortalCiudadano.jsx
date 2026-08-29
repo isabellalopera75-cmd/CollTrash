@@ -7,7 +7,24 @@ import {
   X, ImagePlus, LocateFixed, Loader2
 } from 'lucide-react';
 import io from 'socket.io-client';
-import { crearReporteCiudadano, obtenerMisReportes, obtenerBarrios, verificarCorreo, login, registrarCiudadano } from '../services/api';
+import { crearReporteCiudadano, obtenerMisReportes, obtenerBarrios, detectarBarrio, verificarCorreo, login, registrarCiudadano, solicitarRecuperacion } from '../services/api';
+import { formatearInstanteCorto } from '../utils/dateUtils';
+
+/**
+ * Traduce el sector del barrio (columna `sector` de la tabla barrios) a la
+ * clave de zona que usa el cuadro de horarios de esta pantalla.
+ *
+ * El cuadro sigue siendo una maqueta con tres zonas; lo que cambia es que el
+ * barrio que se muestra al ciudadano ya es el suyo de verdad y no un valor
+ * fijo. Los sectores que no encajan en norte o sur caen en centro, de modo que
+ * barriosPorZona[zona] nunca queda indefinido.
+ */
+const zonaDeSector = (sector) => {
+  const s = (sector || '').trim().toLowerCase();
+  if (s === 'norte') return 'norte';
+  if (s === 'sur') return 'sur';
+  return 'centro';
+};
 
 const barriosPorZona = {
   "centro": {
@@ -59,11 +76,13 @@ export default function PortalCiudadano() {
   const [barrioReal, setBarrioReal] = useState("Barrio Centro");
   const [tab, setTab] = useState("inicio");
   const [misReportes, setMisReportes] = useState([]);
+  // Por qué se llegó a la selección manual (permiso denegado, sin cobertura...).
+  const [motivoManual, setMotivoManual] = useState('');
 
   useEffect(() => {
     // Set body background to match citizen app background for status bar blending
     const prevBg = document.body.style.backgroundColor;
-    document.body.style.backgroundColor = '#080c0a';
+    document.body.style.backgroundColor = 'var(--fondo)';
 
     const localZona = localStorage.getItem('pc_zona');
     const localBarrio = localStorage.getItem('pc_barrio');
@@ -86,23 +105,30 @@ export default function PortalCiudadano() {
   }, []);
 
   useEffect(() => {
-    const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
     const token = localStorage.getItem('token');
+
+    // Sin sesión no se abre el socket. El servidor rechaza los handshakes sin
+    // token y Socket.io reintenta la conexión de forma indefinida, así que un
+    // visitante anónimo generaba un goteo permanente de intentos fallidos.
+    // Además, el seguimiento en vivo sólo tiene sentido para reportes propios.
+    if (!token) return undefined;
+
+    const socketUrl = window.location.hostname === 'localhost' && window.location.port !== '3000' ? 'http://localhost:3000' : window.location.origin;
     const socket = io(socketUrl, {
       auth: { token }
     });
 
-    socket.on('connect', () => {
-      console.log('🔌 Socket conectado en PortalCiudadano');
-    });
-
-    socket.on('reporte_actualizado', (updatedReport) => {
-      // Re-fetch all reports for this citizen since we don't have local IDs anymore
+    socket.on('reporte_actualizado', () => {
+      // El evento llega sólo para los reportes de este ciudadano (RF-08.6);
+      // se recargan sus reportes para reflejar el nuevo estado.
       cargarMisReportes();
     });
 
     return () => socket.disconnect();
-  }, []);
+    // Se reevalúa al cambiar la fase de onboarding: cuando el ciudadano
+    // termina de autenticarse ya existe token y el socket puede abrirse.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboarding]);
 
   const cargarMisReportes = async () => {
     try {
@@ -140,27 +166,23 @@ export default function PortalCiudadano() {
 
   if (onboarding !== "done") {
     return (
-      <div style={{
-        minHeight: '100vh',
-        backgroundColor: '#080c0a',
-        color: '#f0f0e8',
-        fontFamily: '"Inter", "Geist", sans-serif',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
+      // La altura la decide la hoja de estilos, porque cambia con el tamaño de
+      // pantalla: en el teléfono se desplaza la página entera, en el escritorio
+      // la pantalla queda fija (ver .pc-onboarding-wrapper).
+      <div className="pc-onboarding-wrapper">
         {/* TOPBAR UNIFICADA */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '24px 40px',
-          borderBottom: '1px solid rgba(255,255,255,0.05)'
+          borderBottom: '1px solid var(--borde)'
         }}>
-          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: '#5a5f5c' }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: 'var(--texto-2)' }}>
             COLLTRASH // PORTAL CIUDADANO
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10px', fontWeight: 700, color: '#4a7c59', letterSpacing: '1px' }}>
-            <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#4a7c59', animation: 'blink 1.5s infinite' }}></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10px', fontWeight: 700, color: 'var(--marca)', letterSpacing: '1px' }}>
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--marca)', animation: 'blink 1.5s infinite' }}></div>
             EN LÍNEA
           </div>
         </div>
@@ -170,15 +192,15 @@ export default function PortalCiudadano() {
           {/* PANEL IZQUIERDO */}
           <div className="pc-left-panel">
             <div className="pc-left-content">
-              <div style={{ fontSize: '10px', fontWeight: 700, color: '#4a7c59', letterSpacing: '3px', marginBottom: '40px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--marca)', letterSpacing: '3px', marginBottom: '40px' }}>
                 GESTIÓN DE RESIDUOS · NEIVA, COL.
               </div>
               <div style={{ lineHeight: 0.85, marginBottom: '24px' }}>
-                <div className="pc-hero-text" style={{ fontWeight: 900, color: '#fff', letterSpacing: '-0.05em' }}>COLL</div>
-                <div className="pc-hero-text" style={{ fontWeight: 900, color: 'transparent', WebkitTextStroke: '2px #fff', letterSpacing: '-0.05em' }}>TRASH</div>
+                <div className="pc-hero-text" style={{ fontWeight: 900, color: 'var(--texto)', letterSpacing: '-0.05em' }}>COLL</div>
+                <div className="pc-hero-text" style={{ fontWeight: 900, color: 'transparent', WebkitTextStroke: '2px var(--texto)', letterSpacing: '-0.05em' }}>TRASH</div>
               </div>
-              <div className="pc-divider-line" style={{ width: '40px', height: '1px', backgroundColor: '#4a7c59', marginBottom: '24px' }}></div>
-              <p style={{ color: '#5a5f5c', fontSize: '13px', maxWidth: '320px', lineHeight: 1.5, marginBottom: '40px' }}>
+              <div className="pc-divider-line" style={{ width: '40px', height: '1px', backgroundColor: 'var(--marca)', marginBottom: '24px' }}></div>
+              <p style={{ color: 'var(--texto-2)', fontSize: '13px', maxWidth: '320px', lineHeight: 1.5, marginBottom: '40px' }}>
                 Plataforma ciudadana para reportar incidentes y consultar el servicio de recolección.
               </p>
               <div className="pc-features-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -190,8 +212,8 @@ export default function PortalCiudadano() {
                   "Consejos de reciclaje",
                   "Seguimiento de tus reportes"
                 ].map((item, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#5a5f5c', fontSize: '12px', fontWeight: 500 }}>
-                    <div style={{ width: '16px', height: '1px', backgroundColor: '#4a7c59' }}></div>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--texto-2)', fontSize: '12px', fontWeight: 500 }}>
+                    <div style={{ width: '16px', height: '1px', backgroundColor: 'var(--marca)' }}></div>
                     {item}
                   </div>
                 ))}
@@ -199,9 +221,9 @@ export default function PortalCiudadano() {
             </div>
             
             {/* FOOTER IZQUIERDO */}
-            <div className="pc-left-footer" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', color: '#2a2f2c', fontSize: '10px', fontWeight: 700, letterSpacing: '2px' }}>
-              <div>EST. 2024</div>
-              <div>V 2.0</div>
+            <div className="pc-left-footer" style={{ borderTop: '1px solid var(--borde)', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', color: 'var(--texto-2)', fontSize: '12px', fontWeight: 600, letterSpacing: '.08em' }}>
+              <div>Neiva, Huila</div>
+              <div>Servicio de aseo</div>
             </div>
           </div>
 
@@ -209,17 +231,11 @@ export default function PortalCiudadano() {
           <div className="pc-right-panel">
             <div style={{ width: '100%', maxWidth: '400px', margin: '0 auto' }}>
               {onboarding === "auth" && <OnboardingAuth onNext={() => setOnboarding("ubicacion")} />}
-              {onboarding === "ubicacion" && <OnboardingUbicacion onNext={() => setOnboarding("confirmacion")} onManual={() => setOnboarding("manual")} setZona={(z) => {setZona(z); setBarrioReal("Barrio Centro");}} />}
-              {onboarding === "manual" && <OnboardingManual onNext={() => setOnboarding("confirmacion")} setZona={setZona} setBarrioReal={setBarrioReal} onBack={() => setOnboarding("ubicacion")} />}
+              {onboarding === "ubicacion" && <OnboardingUbicacion onNext={() => setOnboarding("confirmacion")} onManual={(motivo) => { setMotivoManual(typeof motivo === 'string' ? motivo : ''); setOnboarding("manual"); }} setZona={setZona} setBarrioReal={setBarrioReal} />}
+              {onboarding === "manual" && <OnboardingManual onNext={() => setOnboarding("confirmacion")} setZona={setZona} setBarrioReal={setBarrioReal} onBack={() => setOnboarding("ubicacion")} motivo={motivoManual} />}
               {onboarding === "confirmacion" && <OnboardingConfirmacion zona={zona} barrioReal={barrioReal} onFinish={() => handleFinishOnboarding(zona, barrioReal)} />}
             </div>
-            {/* ETIQUETA VERTICAL GRS */}
-            <div style={{
-              position: 'absolute', bottom: '40px', right: '10px', transform: 'rotate(-90deg)', transformOrigin: 'right bottom',
-              fontSize: '10px', color: '#2a2f2c', fontWeight: 700, letterSpacing: '3px'
-            }}>
-              GRS — V2.4.1 — 2026
-            </div>
+
           </div>
         </div>
       </div>
@@ -234,17 +250,17 @@ export default function PortalCiudadano() {
       <div className="pc-container">
         <div style={{ padding: 'calc(16px + env(safe-area-inset-top, 0px)) 16px 16px 16px', borderBottom: '1px solid var(--pc-border)', backgroundColor: 'var(--pc-bg-background)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'rgba(74, 124, 89, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a7c59' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'var(--marca-suave)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca)' }}>
               <Home size={20} />
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: '16px' }}>Hola, {userName}</div>
-              <div style={{ fontSize: '12px', color: '#8C95A6' }}>{barrioReal} · Neiva</div>
+              <div style={{ fontSize: '12px', color: 'var(--texto-3)' }}>{barrioReal} · Neiva</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <Bell size={20} color="#8C95A6" style={{ cursor: 'pointer' }} />
-            <LogOut size={20} color="#8C95A6" style={{ cursor: 'pointer' }} onClick={handleLogout} />
+            <Bell size={20} color="var(--texto-3)" style={{ cursor: 'pointer' }} />
+            <LogOut size={20} color="var(--texto-3)" style={{ cursor: 'pointer' }} onClick={handleLogout} />
           </div>
         </div>
 
@@ -284,6 +300,31 @@ function OnboardingAuth({ onNext }) {
   const [password, setPassword] = useState("");
   const [tabMode, setTabMode] = useState("register"); // "register" or "login"
   const [errorMsg, setErrorMsg] = useState("");
+  // Modo recuperación: se pide el correo y se envía el enlace.
+  const [recuperando, setRecuperando] = useState(false);
+  const [avisoRecuperacion, setAvisoRecuperacion] = useState("");
+
+  /**
+   * Pide el enlace de recuperación.
+   *
+   * El servidor responde lo mismo exista o no la cuenta, así que aquí tampoco
+   * se distingue: mostrar «ese correo no está registrado» convertiría la
+   * pantalla en un detector de cuentas.
+   */
+  const handleRecuperar = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const res = await solicitarRecuperacion(email.trim().toLowerCase());
+      setAvisoRecuperacion(res.data.mensaje);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.mensaje || 'No pudimos procesar la solicitud. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
@@ -356,6 +397,72 @@ function OnboardingAuth({ onNext }) {
     }
   };
 
+  // Vista de recuperación. Ocupa el sitio del formulario en lugar de abrir una
+  // ventana aparte: es el mismo trámite —identificarse— y el correo ya está
+  // escrito, así que se arrastra sin pedirlo dos veces.
+  if (recuperando) {
+    return (
+      <div style={{ width: '100%' }}>
+        <button
+          type="button"
+          onClick={() => { setRecuperando(false); setAvisoRecuperacion(''); setErrorMsg(''); }}
+          style={{ background: 'none', border: 'none', color: 'var(--texto-2)', fontSize: '11px', cursor: 'pointer', marginBottom: '24px', padding: 0, fontFamily: 'inherit' }}
+        >
+          ← Volver al acceso
+        </button>
+
+        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: 'var(--texto)', marginBottom: '8px' }}>
+          ¿Olvidaste tu contraseña?
+        </h1>
+        <p style={{ fontSize: '13px', color: 'var(--texto-2)', lineHeight: 1.55, marginBottom: '40px' }}>
+          Escribe tu correo y te enviaremos un enlace para elegir una nueva. El enlace caduca en 30 minutos.
+        </p>
+
+        {avisoRecuperacion ? (
+          <div style={{ padding: '16px', background: 'var(--marca-suave)', border: '1px solid var(--marca-borde)', borderRadius: '10px', fontSize: '13px', lineHeight: 1.55, color: 'var(--texto)' }}>
+            <i className="bi bi-envelope-check" style={{ marginRight: '8px', color: 'var(--marca)' }}></i>
+            {avisoRecuperacion}
+            <div style={{ fontSize: '12px', color: 'var(--texto-2)', marginTop: '10px' }}>
+              Revisa también la carpeta de correo no deseado.
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleRecuperar}>
+            <div style={{ position: 'relative', marginBottom: '24px' }}>
+              <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTRÓNICO</label>
+              <input
+                type="email"
+                className="transparent-input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ciudadano@correo.com"
+                required
+                style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid var(--marca)', color: 'var(--texto)', padding: '8px 0', outline: 'none' }}
+              />
+            </div>
+
+            {errorMsg && (
+              <div style={{ color: 'var(--peligro)', fontSize: '12px', marginBottom: '16px' }}>{errorMsg}</div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || !email.trim()}
+              style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'none', border: 'none', padding: 0, cursor: loading ? 'wait' : 'pointer', opacity: (loading || !email.trim()) ? 0.5 : 1 }}
+            >
+              <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--marca)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca-contraste)', fontSize: '18px' }}>
+                <i className="bi bi-arrow-right"></i>
+              </div>
+              <span style={{ fontSize: '13px', color: 'var(--texto)', fontWeight: 800, letterSpacing: '3px' }}>
+                {loading ? 'ENVIANDO...' : 'ENVIAR ENLACE'}
+              </span>
+            </button>
+          </form>
+        )}
+      </div>
+    );
+  }
+
   return (
       <div style={{ width: '100%' }}>
         
@@ -364,11 +471,11 @@ function OnboardingAuth({ onNext }) {
           <button 
             type="button" 
             style={{
-              background: 'none', border: 'none', padding: '0 0 6px 0',
-              color: tabMode === 'login' ? '#fff' : '#5a5f5c',
-              fontSize: '10px', fontWeight: 700, letterSpacing: '2px',
+              background: 'none', border: 'none', padding: '12px 0 8px', minHeight: '44px',
+              color: tabMode === 'login' ? 'var(--texto)' : 'var(--texto-2)',
+              fontSize: '12px', fontWeight: 700, letterSpacing: '.12em',
               cursor: 'pointer',
-              borderBottom: `2px solid ${tabMode === 'login' ? '#4a7c59' : 'transparent'}`,
+              borderBottom: `2px solid ${tabMode === 'login' ? 'var(--marca)' : 'transparent'}`,
               transition: 'all 0.3s'
             }}
             onClick={() => { setTabMode('login'); setErrorMsg(''); }}
@@ -378,11 +485,11 @@ function OnboardingAuth({ onNext }) {
           <button 
             type="button" 
             style={{
-              background: 'none', border: 'none', padding: '0 0 6px 0',
-              color: tabMode === 'register' ? '#fff' : '#5a5f5c',
-              fontSize: '10px', fontWeight: 700, letterSpacing: '2px',
+              background: 'none', border: 'none', padding: '12px 0 8px', minHeight: '44px',
+              color: tabMode === 'register' ? 'var(--texto)' : 'var(--texto-2)',
+              fontSize: '12px', fontWeight: 700, letterSpacing: '.12em',
               cursor: 'pointer',
-              borderBottom: `2px solid ${tabMode === 'register' ? '#4a7c59' : 'transparent'}`,
+              borderBottom: `2px solid ${tabMode === 'register' ? 'var(--marca)' : 'transparent'}`,
               transition: 'all 0.3s'
             }}
             onClick={() => { setTabMode('register'); setErrorMsg(''); }}
@@ -392,10 +499,10 @@ function OnboardingAuth({ onNext }) {
         </div>
 
         <div style={{ marginBottom: '40px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: 'var(--texto)', marginBottom: '8px' }}>
             {tabMode === 'register' ? 'Crea tu cuenta.' : 'Bienvenido de vuelta.'}
           </h1>
-          <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+          <p style={{ fontSize: '13px', color: 'var(--texto-2)' }}>
             {tabMode === 'register' ? 'Regístrate para reportar incidentes de recolección en tu sector.' : 'Accede para reportar incidentes y consultar el estado de tus solicitudes.'}
           </p>
         </div>
@@ -405,7 +512,7 @@ function OnboardingAuth({ onNext }) {
           {tabMode === "register" && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '30px' }}>
               <div style={{ position: 'relative' }}>
-                <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>NOMBRE COMPLETO</label>
+                <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>NOMBRE COMPLETO</label>
                 <input 
                   type="text" 
                   className="transparent-input" 
@@ -414,19 +521,19 @@ function OnboardingAuth({ onNext }) {
                   onChange={e => setNombre(e.target.value)} 
                   style={{
                     width: '100%', background: 'transparent', border: 'none',
-                    borderBottom: '1px solid #4a7c59',
-                    color: '#fff', fontSize: '15px', padding: '8px 0', outline: 'none',
-                    caretColor: '#4a7c59', transition: 'border-color 0.3s'
+                    borderBottom: '1px solid var(--marca)',
+                    color: 'var(--texto)', fontSize: '15px', padding: '14px 0', outline: 'none',
+                    caretColor: 'var(--marca)', transition: 'border-color 0.3s'
                   }}
-                  onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'}
-                  onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'}
+                  onFocus={e => e.target.style.borderBottom = '1px solid var(--marca)'}
+                  onBlur={e => e.target.style.borderBottom = '1px solid var(--marca)'}
                 />
               </div>
             </div>
           )}
 
           <div style={{ position: 'relative' }}>
-            <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTRÓNICO</label>
+            <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTRÓNICO</label>
             <input 
               type="email" required 
               className="transparent-input" 
@@ -435,24 +542,24 @@ function OnboardingAuth({ onNext }) {
               onChange={e => setEmail(e.target.value)} 
               style={{
                 width: '100%', background: 'transparent', border: 'none',
-                borderBottom: '1px solid #4a7c59',
-                color: '#fff', fontSize: '15px', padding: '8px 0', outline: 'none',
-                caretColor: '#4a7c59', transition: 'border-color 0.3s'
+                borderBottom: '1px solid var(--marca)',
+                color: 'var(--texto)', fontSize: '15px', padding: '14px 0', outline: 'none',
+                caretColor: 'var(--marca)', transition: 'border-color 0.3s'
               }}
-              onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'}
-              onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'}
+              onFocus={e => e.target.style.borderBottom = '1px solid var(--marca)'}
+              onBlur={e => e.target.style.borderBottom = '1px solid var(--marca)'}
             />
           </div>
 
           {tabMode === "register" ? (
             <div style={{ position: 'relative' }}>
-              <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="transparent-input" placeholder="••••••••" style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #4a7c59', color: '#fff', fontSize: '15px', padding: '8px 30px 8px 0', outline: 'none', caretColor: '#4a7c59', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'} onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'} />
-              <i className="bi bi-eye" style={{ position: 'absolute', right: 0, bottom: '8px', color: '#5a5f5c' }}></i>
+              <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
+              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="transparent-input" placeholder="••••••••" style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid var(--marca)', color: 'var(--texto)', fontSize: '15px', padding: '14px 30px 14px 0', outline: 'none', caretColor: 'var(--marca)', transition: 'border-color 0.3s' }} onFocus={e => e.target.style.borderBottom = '1px solid var(--marca)'} onBlur={e => e.target.style.borderBottom = '1px solid var(--marca)'} />
+              <i className="bi bi-eye" style={{ position: 'absolute', right: 0, bottom: '8px', color: 'var(--texto-2)' }}></i>
             </div>
           ) : (
             <div style={{ position: 'relative' }}>
-              <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
+              <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
               <input 
                 type="password" required 
                 className="transparent-input" 
@@ -461,20 +568,27 @@ function OnboardingAuth({ onNext }) {
                 onChange={e => setPassword(e.target.value)} 
                 style={{
                   width: '100%', background: 'transparent', border: 'none',
-                  borderBottom: '1px solid #4a7c59',
-                  color: '#fff', fontSize: '15px', padding: '8px 30px 8px 0', outline: 'none',
-                  caretColor: '#4a7c59', transition: 'border-color 0.3s'
+                  borderBottom: '1px solid var(--marca)',
+                  color: 'var(--texto)', fontSize: '15px', padding: '14px 30px 14px 0', outline: 'none',
+                  caretColor: 'var(--marca)', transition: 'border-color 0.3s'
                 }}
-                onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'}
-                onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'}
+                onFocus={e => e.target.style.borderBottom = '1px solid var(--marca)'}
+                onBlur={e => e.target.style.borderBottom = '1px solid var(--marca)'}
               />
-              <i className="bi bi-eye" style={{ position: 'absolute', right: 0, bottom: '8px', color: '#5a5f5c', cursor: 'pointer' }}></i>
-              <div style={{ position: 'absolute', right: 0, top: '-18px', fontSize: '10px', color: '#5a5f5c', cursor: 'pointer' }}>¿Olvidaste?</div>
+              <i className="bi bi-eye" style={{ position: 'absolute', right: 0, bottom: '8px', color: 'var(--texto-2)', cursor: 'pointer' }}></i>
+              {/* Antes era un <div> sin accion: parecia un enlace y no hacia nada. */}
+              <button
+                type="button"
+                onClick={() => { setRecuperando(true); setErrorMsg(""); setAvisoRecuperacion(""); }}
+                style={{ position: 'absolute', right: 0, top: '-18px', fontSize: '10px', color: 'var(--texto-2)', cursor: 'pointer', background: 'none', border: 'none', padding: 0, fontFamily: 'inherit', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+              >
+                ¿Olvidaste?
+              </button>
             </div>
           )}
 
           {errorMsg && (
-            <div style={{ color: '#ef4444', fontSize: '12px', letterSpacing: '0.5px' }}>
+            <div style={{ color: 'var(--peligro)', fontSize: '12px', letterSpacing: '0.5px' }}>
               {errorMsg}
             </div>
           )}
@@ -490,19 +604,19 @@ function OnboardingAuth({ onNext }) {
               }}
             >
               <div style={{
-                width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+                width: '44px', height: '44px', borderRadius: '50%', background: 'var(--marca)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca-contraste)', fontSize: '18px',
                 transition: 'transform 0.2s', transform: loading ? 'scale(0.9)' : 'scale(1)'
               }}>
                 {loading ? <Loader2 className="animate-spin-custom" size={20} /> : <i className="bi bi-arrow-right"></i>}
               </div>
-              <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--texto)', fontWeight: 800, letterSpacing: '3px' }}>
                 {tabMode === "register" ? "CREAR CUENTA" : "INGRESAR"}
               </span>
             </button>
             
             <div 
-              style={{ fontSize: '11px', color: '#5a5f5c', cursor: 'pointer' }}
+              style={{ fontSize: '11px', color: 'var(--texto-2)', cursor: 'pointer' }}
               onClick={() => setTabMode(tabMode === 'register' ? 'login' : 'register')}
             >
               {tabMode === "register" ? "Ya tengo cuenta →" : "No tengo cuenta →"}
@@ -510,33 +624,83 @@ function OnboardingAuth({ onNext }) {
           </div>
         </form>
 
-        <p style={{ fontSize: '11px', color: '#8C95A6', marginTop: '24px', textAlign: 'center' }}>
+        <p style={{ fontSize: '12px', color: 'var(--texto-2)', marginTop: '24px', textAlign: 'center' }}>
           Tus reportes quedarán vinculados de forma segura a esta cuenta.
         </p>
       </div>
     );
 }
 
-function OnboardingUbicacion({ onNext, onManual, setZona }) {
+function OnboardingUbicacion({ onNext, onManual, setZona, setBarrioReal }) {
   const [loading, setLoading] = useState(false);
+
+  /**
+   * Detecta el barrio a partir de la posicion real del dispositivo.
+   *
+   * Antes este boton era decorativo: esperaba dos segundos y fijaba "centro" y
+   * "Barrio Centro" para todo el mundo, sin pedir la ubicacion ni consultar al
+   * servidor. Ahora pide la posicion al navegador y la resuelve contra
+   * GET /api/barrios/detectar.
+   *
+   * Cualquier tropiezo -- permiso denegado, sin sensor, sin respuesta a tiempo,
+   * o ningun barrio del catalogo dentro del radio -- lleva a la seleccion
+   * manual explicando el motivo, en vez de inventar un barrio.
+   */
   const handleDetect = () => {
+    if (!navigator.geolocation) {
+      onManual('Su navegador no permite compartir la ubicación. Elija su barrio de la lista.');
+      return;
+    }
+
+    // La geolocalizacion del navegador exige contexto seguro: funciona en
+    // https (ngrok) y en localhost, pero no sobre http en una IP de la red
+    // local. En ese caso el navegador ni siquiera pregunta y salta el error.
     setLoading(true);
-    setTimeout(() => {
-      setZona("centro");
-      onNext();
-    }, 2000);
+
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const res = await detectarBarrio(coords.latitude, coords.longitude);
+          const barrio = res.data?.barrio;
+          if (!barrio) {
+            onManual('No pudimos reconocer su barrio. Elíjalo de la lista.');
+            return;
+          }
+          setZona(zonaDeSector(barrio.sector));
+          setBarrioReal(barrio.nombre);
+          onNext();
+        } catch (err) {
+          const sinCobertura = err.response?.status === 404;
+          onManual(sinCobertura
+            ? 'No encontramos ningún barrio del servicio cerca de su ubicación. Elíjalo de la lista.'
+            : 'No pudimos consultar su barrio en este momento. Elíjalo de la lista.');
+        } finally {
+          setLoading(false);
+        }
+      },
+      (error) => {
+        setLoading(false);
+        const motivos = {
+          1: 'No nos dio permiso para usar su ubicación. Puede elegir su barrio de la lista.',
+          2: 'No pudimos obtener su ubicación. Elija su barrio de la lista.',
+          3: 'La ubicación tardó demasiado en responder. Elija su barrio de la lista.'
+        };
+        onManual(motivos[error.code] || 'No pudimos obtener su ubicación. Elija su barrio de la lista.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
   };
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: '40px' }}>
-        <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'transparent', border: '1px solid #4a7c59', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a7c59', marginBottom: '24px' }}>
+        <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'transparent', border: '1px solid var(--marca)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca)', marginBottom: '24px' }}>
           <Navigation size={20} strokeWidth={2} style={{ transform: 'rotate(45deg) translate(-2px, 2px)' }} />
         </div>
         
-        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: 'var(--texto)', marginBottom: '8px' }}>
           Permite tu ubicación.
         </h1>
-        <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+        <p style={{ fontSize: '13px', color: 'var(--texto-2)' }}>
           Necesitamos tu ubicación para mostrarte los horarios y rutas de tu zona.
         </p>
       </div>
@@ -547,8 +711,8 @@ function OnboardingUbicacion({ onNext, onManual, setZona }) {
           { i: <Bell size={14}/>, t: "Notificaciones previas" },
           { i: <LocateFixed size={14}/>, t: "Seguimiento en tiempo real" }
         ].map((item, idx) => (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '16px', color: '#5a5f5c', fontSize: '12px', fontWeight: 500 }}>
-             <div style={{ color: '#4a7c59' }}>{item.i}</div>
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--texto-2)', fontSize: '12px', fontWeight: 500 }}>
+             <div style={{ color: 'var(--marca)' }}>{item.i}</div>
              {item.t}
           </div>
         ))}
@@ -565,29 +729,36 @@ function OnboardingUbicacion({ onNext, onManual, setZona }) {
           }}
         >
           <div style={{
-            width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+            width: '44px', height: '44px', borderRadius: '50%', background: 'var(--marca)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca-contraste)', fontSize: '18px',
             transition: 'transform 0.2s', transform: loading ? 'scale(0.9)' : 'scale(1)'
           }}>
             {loading ? <Loader2 className="animate-spin-custom" size={20} /> : <i className="bi bi-arrow-right"></i>}
           </div>
-          <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--texto)', fontWeight: 800, letterSpacing: '3px' }}>
              {loading ? 'DETECTANDO...' : 'PERMITIR'}
           </span>
         </button>
         
-        <div 
-          onClick={onManual} 
-          style={{ fontSize: '11px', color: '#5a5f5c', cursor: 'pointer' }}
+        {/* onClick={() => onManual()} y no onClick={onManual}: al pasar la
+            función directamente, React le entrega su objeto de evento como
+            primer argumento. Ese argumento es ahora el motivo por el que se
+            llega a la selección manual, de modo que el evento acababa
+            almacenado como texto y la pantalla siguiente intentaba pintarlo
+            dentro de un <p>. */}
+        <button
+          type="button"
+          onClick={() => onManual()}
+          style={{ fontSize: '11px', color: 'var(--texto-2)', cursor: 'pointer', background: 'none', border: 'none', padding: 0, fontFamily: 'inherit' }}
         >
           Ingresar manual →
-        </div>
+        </button>
       </div>
     </div>
   );
 }
 
-function OnboardingManual({ onNext, onBack, setZona, setBarrioReal }) {
+function OnboardingManual({ onNext, onBack, setZona, setBarrioReal, motivo }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [barriosDb, setBarriosDb] = useState([]);
@@ -606,9 +777,10 @@ function OnboardingManual({ onNext, onBack, setZona, setBarrioReal }) {
 
   const handleConfirm = () => {
     if (selected) {
-      const zonasArr = ["centro", "norte", "sur"];
-      const z = zonasArr[selected.id % 3];
-      setZona(z);
+      // zonaDeSector y no `id % 3`: el resto de la división del identificador
+      // repartía los barrios entre las tres zonas al azar, de modo que un
+      // barrio del norte podía quedar con los horarios del sur.
+      setZona(zonaDeSector(selected.sector));
       setBarrioReal(selected.nombre);
       onNext();
     }
@@ -617,42 +789,49 @@ function OnboardingManual({ onNext, onBack, setZona, setBarrioReal }) {
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: '40px' }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#5a5f5c', fontSize: '11px', cursor: 'pointer', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--texto-2)', fontSize: '11px', cursor: 'pointer', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}>
           ← Volver
         </button>
-        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: 'var(--texto)', marginBottom: '8px' }}>
           Elige tu barrio.
         </h1>
-        <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+        <p style={{ fontSize: '13px', color: 'var(--texto-2)' }}>
           Busca tu zona para asignarte los horarios.
         </p>
+        {/* Sin este aviso, quien acaba aquí tras un fallo de la detección no
+            entiende por qué la aplicación cambió de pantalla sola. */}
+        {motivo && (
+          <p style={{ fontSize: '12px', color: 'var(--texto-3)', marginTop: '12px', lineHeight: 1.5 }}>
+            {motivo}
+          </p>
+        )}
       </div>
       
       <div style={{ position: 'relative', marginBottom: '40px' }}>
-        <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: '#5a5f5c', fontWeight: 700, letterSpacing: '2px' }}>BUSCAR BARRIO</label>
-        <MapPin size={16} style={{ position: 'absolute', left: 0, bottom: '10px', color: '#4a7c59' }} />
+        <label style={{ position: 'absolute', top: '-18px', left: 0, fontSize: '10px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>BUSCAR BARRIO</label>
+        <MapPin size={16} style={{ position: 'absolute', left: 0, bottom: '10px', color: 'var(--marca)' }} />
         <select 
-          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #4a7c59', color: selected ? '#fff' : '#5a5f5c', fontSize: '15px', padding: '8px 0 8px 24px', outline: 'none', cursor: 'pointer', transition: 'border-color 0.3s', appearance: 'none' }}
+          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid var(--marca)', color: selected ? 'var(--texto)' : 'var(--texto-2)', fontSize: '15px', padding: '8px 0 8px 24px', outline: 'none', cursor: 'pointer', transition: 'border-color 0.3s', appearance: 'none' }}
           value={selected?.id || ""} 
           onChange={(e) => {
             const bId = parseInt(e.target.value);
             const b = barriosDb.find(barrio => barrio.id === bId);
             setSelected(b || null);
           }}
-          onFocus={e => e.target.style.borderBottom = '1px solid #3d9e5a'} 
-          onBlur={e => e.target.style.borderBottom = '1px solid #4a7c59'} 
+          onFocus={e => e.target.style.borderBottom = '1px solid var(--marca)'} 
+          onBlur={e => e.target.style.borderBottom = '1px solid var(--marca)'} 
         >
-          <option value="" disabled style={{ backgroundColor: '#080c0a' }}>Selecciona un barrio...</option>
+          <option value="" disabled style={{ backgroundColor: 'var(--fondo)' }}>Selecciona un barrio...</option>
           {barriosDb.map((b) => {
             if (query && !b.nombre.toLowerCase().includes(query.toLowerCase())) return null;
             return (
-              <option key={b.id} value={b.id} style={{ backgroundColor: '#080c0a', color: '#fff' }}>
+              <option key={b.id} value={b.id} style={{ backgroundColor: 'var(--fondo)', color: 'var(--texto)' }}>
                 {b.nombre} - Neiva
               </option>
             );
           })}
         </select>
-        <div style={{ position: 'absolute', right: 0, bottom: '10px', color: '#4a7c59', pointerEvents: 'none' }}>▼</div>
+        <div style={{ position: 'absolute', right: 0, bottom: '10px', color: 'var(--marca)', pointerEvents: 'none' }}>▼</div>
       </div>
       
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
@@ -666,13 +845,13 @@ function OnboardingManual({ onNext, onBack, setZona, setBarrioReal }) {
           }}
         >
           <div style={{
-            width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+            width: '44px', height: '44px', borderRadius: '50%', background: 'var(--marca)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca-contraste)', fontSize: '18px',
             transition: 'transform 0.2s'
           }}>
             <i className="bi bi-arrow-right"></i>
           </div>
-          <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--texto)', fontWeight: 800, letterSpacing: '3px' }}>
             CONFIRMAR BARRIO
           </span>
         </button>
@@ -686,42 +865,42 @@ function OnboardingConfirmacion({ zona, barrioReal, onFinish }) {
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: '40px' }}>
-        <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'transparent', border: '1px solid #4a7c59', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a7c59', marginBottom: '24px' }}>
+        <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'transparent', border: '1px solid var(--marca)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca)', marginBottom: '24px' }}>
           <CheckCircle2 size={20} strokeWidth={2} />
         </div>
         
-        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: '#fff', marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '32px', fontWeight: 900, letterSpacing: '-1px', color: 'var(--texto)', marginBottom: '8px' }}>
           ¡Todo listo!
         </h1>
-        <p style={{ fontSize: '13px', color: '#5a5f5c' }}>
+        <p style={{ fontSize: '13px', color: 'var(--texto-2)' }}>
           Tu zona ha sido configurada correctamente.
         </p>
       </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '40px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-          <div style={{ color: '#4a7c59', marginTop: '2px' }}><MapPin size={18} /></div>
+          <div style={{ color: 'var(--marca)', marginTop: '2px' }}><MapPin size={18} /></div>
           <div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>{barrioReal}</div>
-            <div style={{ fontSize: '12px', color: '#5a5f5c' }}>{barrio.sector}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--texto)' }}>{barrioReal}</div>
+            <div style={{ fontSize: '12px', color: 'var(--texto-2)' }}>{barrio.sector}</div>
           </div>
         </div>
         
-        <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+        <div style={{ height: '1px', backgroundColor: 'var(--borde)' }}></div>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {barrio.horarios.slice(0,3).map(h => (
             <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ color: h.tipo === 'Reciclaje' ? '#4a7c59' : '#5a5f5c' }}>
+                <div style={{ color: h.tipo === 'Reciclaje' ? 'var(--marca)' : 'var(--texto-2)' }}>
                   {h.tipo === 'Reciclaje' ? <Recycle size={14} /> : <Truck size={14} />}
                 </div>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>{h.dia}</span>
-                <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', padding: '2px 6px', border: `1px solid ${h.tipo === 'Reciclaje' ? '#4a7c59' : '#5a5f5c'}`, borderRadius: '4px', color: h.tipo === 'Reciclaje' ? '#4a7c59' : '#5a5f5c' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--texto)' }}>{h.dia}</span>
+                <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', padding: '2px 6px', border: `1px solid ${h.tipo === 'Reciclaje' ? 'var(--marca)' : 'var(--texto-2)'}`, borderRadius: '4px', color: h.tipo === 'Reciclaje' ? 'var(--marca)' : 'var(--texto-2)' }}>
                   {h.tipo.toUpperCase()}
                 </span>
               </div>
-              <span style={{ fontSize: '12px', color: '#5a5f5c', fontWeight: 500 }}>{h.hora}</span>
+              <span style={{ fontSize: '12px', color: 'var(--texto-2)', fontWeight: 500 }}>{h.hora}</span>
             </div>
           ))}
         </div>
@@ -736,13 +915,13 @@ function OnboardingConfirmacion({ zona, barrioReal, onFinish }) {
           }}
         >
           <div style={{
-            width: '44px', height: '44px', borderRadius: '50%', background: '#4a7c59',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '18px',
+            width: '44px', height: '44px', borderRadius: '50%', background: 'var(--marca)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca-contraste)', fontSize: '18px',
             transition: 'transform 0.2s'
           }}>
             <ChevronRight size={20} strokeWidth={3} />
           </div>
-          <span style={{ fontSize: '13px', color: '#fff', fontWeight: 800, letterSpacing: '3px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--texto)', fontWeight: 800, letterSpacing: '3px' }}>
             ENTRAR A LA APP
           </span>
         </button>
@@ -758,7 +937,7 @@ function TabInicio({ barrio, onChangeTab }) {
   return (
     <div className="pc-content">
       {/* Hero */}
-      <div style={{ backgroundColor: 'rgba(74, 124, 89, 0.05)', border: '1px solid rgba(74, 124, 89, 0.2)', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
+      <div style={{ backgroundColor: 'var(--marca-suave-2)', border: '1px solid var(--marca-borde)', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--pc-primary)' }}>
           <Truck size={18} />
           <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>PRÓXIMA RECOLECCIÓN</span>
@@ -771,7 +950,7 @@ function TabInicio({ barrio, onChangeTab }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
             {prox.activo ? (
-              <div className="pc-badge pc-badge-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(74, 124, 89, 0.15)', padding: '6px 12px', borderRadius: '16px' }}>
+              <div className="pc-badge pc-badge-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--marca-suave)', padding: '6px 12px', borderRadius: '16px' }}>
                 <div className="animate-ping-custom" style={{ width: '6px', height: '6px', backgroundColor: 'var(--pc-primary)', borderRadius: '50%' }}></div>
                 En camino
               </div>
@@ -804,7 +983,7 @@ function TabInicio({ barrio, onChangeTab }) {
 
       {/* Reportar */}
       <div className="pc-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', cursor: 'pointer', marginBottom: '24px', backgroundColor: 'var(--pc-bg-card)', border: '1px solid var(--pc-border)' }} onClick={() => onChangeTab("reportar")}>
-        <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: 'var(--peligro-suave)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--peligro)' }}>
           <MessageSquareWarning size={20} />
         </div>
         <div style={{ flex: 1 }}>
@@ -818,7 +997,7 @@ function TabInicio({ barrio, onChangeTab }) {
       <div style={{ backgroundColor: 'transparent', border: '1px solid var(--pc-border)', borderRadius: '16px', padding: '16px', display: 'flex', gap: '12px' }}>
         <Info size={20} color="var(--pc-primary)" style={{ flexShrink: 0 }} />
         <div style={{ fontSize: '12px', color: 'var(--pc-text-muted)', lineHeight: '1.5' }}>
-          Recuerda sacar tus bolsas <span style={{ fontWeight: 700, color: '#fff' }}>30 minutos antes</span> del horario de recolección y no bloquear el acceso vehicular.
+          Recuerda sacar tus bolsas <span style={{ fontWeight: 700, color: 'var(--texto)' }}>30 minutos antes</span> del horario de recolección y no bloquear el acceso vehicular.
         </div>
       </div>
     </div>
@@ -842,9 +1021,9 @@ function TabHorarios({ barrio }) {
       <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '16px' }}>Próximas recolecciones</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
         {barrio.horarios.map(h => (
-          <div key={h.id} className="pc-card pc-card-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: h.activo ? 'rgba(74, 124, 89, 0.05)' : 'var(--pc-bg-card)', borderColor: h.activo ? 'rgba(74, 124, 89, 0.3)' : 'var(--pc-border)' }}>
+          <div key={h.id} className="pc-card pc-card-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: h.activo ? 'var(--marca-suave-2)' : 'var(--pc-bg-card)', borderColor: h.activo ? 'var(--marca-borde)' : 'var(--pc-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: h.activo ? 'rgba(0,255,157,0.2)' : 'var(--pc-bg-background)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: h.activo ? 'var(--pc-primary)' : 'var(--pc-text-muted)' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: h.activo ? 'var(--marca-borde)' : 'var(--pc-bg-background)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: h.activo ? 'var(--pc-primary)' : 'var(--pc-text-muted)' }}>
                 {h.tipo === 'Reciclaje' ? <Recycle size={18} /> : <Truck size={18} />}
               </div>
               <div>
@@ -881,8 +1060,8 @@ function TabHorarios({ barrio }) {
             let opacity = 0.5;
             let fw = 400;
 
-            if (isHoy) { bg = 'var(--pc-primary)'; col = '#fff'; opacity = 1; fw = 700; }
-            else if (isReci) { bg = 'rgba(74, 124, 89, 0.15)'; col = 'var(--pc-primary)'; opacity = 1; fw = 600; }
+            if (isHoy) { bg = 'var(--marca)'; col = 'var(--marca-contraste)'; opacity = 1; fw = 700; }
+            else if (isReci) { bg = 'var(--marca-suave)'; col = 'var(--pc-primary)'; opacity = 1; fw = 600; }
             else if (isOrd) { bg = 'var(--pc-bg-secondary)'; col = 'var(--pc-text-foreground)'; opacity = 1; fw = 600; }
 
             return (
@@ -898,7 +1077,7 @@ function TabHorarios({ barrio }) {
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--pc-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--pc-bg-secondary)' }}></div> Ordinarios</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'rgba(74, 124, 89, 0.15)' }}></div> Reciclaje</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--marca-suave)' }}></div> Reciclaje</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--pc-text-muted)' }}><div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--pc-primary)' }}></div> Hoy</div>
         </div>
       </div>
@@ -993,7 +1172,7 @@ function TabReportar({ onEnviado, barrioReal }) {
           id: res.data.reporte.id,
           tipo: res.data.reporte.tipo_problema,
           direccion: res.data.reporte.descripcion,
-          fecha: new Date().toLocaleDateString(),
+          fecha: formatearInstanteCorto(new Date()),
           estado: 'en_revision'
         });
       }, 2500);
@@ -1007,7 +1186,7 @@ function TabReportar({ onEnviado, barrioReal }) {
   if (step === "success") {
     return (
       <div className="pc-centered">
-        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(74, 124, 89, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--pc-primary)' }}>
+        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'var(--marca-borde)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--pc-primary)' }}>
           <CheckCircle2 size={32} />
         </div>
         <h1 className="pc-title">Reporte enviado</h1>
@@ -1035,7 +1214,7 @@ function TabReportar({ onEnviado, barrioReal }) {
 
   return (
     <div className="pc-content">
-      <div style={{ backgroundColor: 'rgba(96, 165, 250, 0.1)', border: '1px solid rgba(96, 165, 250, 0.25)', borderRadius: '12px', padding: '12px', display: 'flex', gap: '12px', marginBottom: '24px' }}>
+      <div style={{ backgroundColor: 'var(--info-suave)', border: '1px solid var(--info)', borderRadius: '12px', padding: '12px', display: 'flex', gap: '12px', marginBottom: '24px' }}>
         <Info size={20} color="var(--pc-status-info)" style={{ flexShrink: 0 }} />
         <div style={{ fontSize: '12px', color: 'var(--pc-status-info)', lineHeight: '1.5' }}>
           Tu reporte será enviado directamente al equipo operativo. Recibirás respuesta por correo cuando sea atendido.
@@ -1074,7 +1253,7 @@ function TabReportar({ onEnviado, barrioReal }) {
         
         {modoUbicacion === 'gps' ? (
           ubicacionGPS ? (
-            <div style={{ backgroundColor: 'rgba(0,255,157,0.1)', border: '1px solid rgba(0,255,157,0.3)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ backgroundColor: 'var(--marca-suave)', border: '1px solid var(--marca-borde)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
               <MapPin size={18} color="var(--pc-primary)" />
               <div style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--pc-primary)' }}>{ubicacionGPS}</div>
               <X size={16} color="var(--pc-primary)" style={{ cursor: 'pointer' }} onClick={() => setUbicacionGPS(null)} />
@@ -1108,11 +1287,11 @@ function TabReportar({ onEnviado, barrioReal }) {
         />
 
         {foto ? (
-          <div style={{ backgroundColor: 'rgba(0,255,157,0.1)', border: '1px solid rgba(0,255,157,0.3)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ backgroundColor: 'var(--marca-suave)', border: '1px solid var(--marca-borde)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             {fotoPreview ? (
               <img src={fotoPreview} alt="Vista previa" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--pc-border)' }} />
             ) : (
-              <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: 'var(--pc-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: 'var(--pc-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--texto)' }}>
                 <Camera size={18} />
               </div>
             )}
@@ -1181,7 +1360,7 @@ function TabMisReportes({ reportes }) {
           let st = statusConfig[r.estado] || statusConfig['en_revision'];
           if (expirado) st = { label: 'Expirado (>42h)', color: 'var(--pc-status-danger)', icon: <XCircle size={16} /> };
 
-          const date = r.created_at ? new Date(r.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : r.fecha;
+          const date = r.created_at ? formatearInstanteCorto(r.created_at) : r.fecha;
           const tipo = r.tipo_problema || r.tipo;
           const dir = r.descripcion || r.direccion;
 
@@ -1192,11 +1371,11 @@ function TabMisReportes({ reportes }) {
                   <MessageSquareWarning size={20} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8f9fa' }}>{tipo}</div>
-                  <div style={{ fontSize: '12px', color: '#8C95A6', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir}</div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--superficie-2)' }}>{tipo}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--texto-3)', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
-                    <span style={{ color: '#8C95A6' }}>{date}</span>
-                    <span style={{ color: '#8C95A6' }}>·</span>
+                    <span style={{ color: 'var(--texto-3)' }}>{date}</span>
+                    <span style={{ color: 'var(--texto-3)' }}>·</span>
                     <span style={{ color: st.color, fontWeight: 600 }}>{st.label}</span>
                   </div>
                 </div>
@@ -1206,11 +1385,11 @@ function TabMisReportes({ reportes }) {
               </div>
 
               {r.justificacion_rechazo && (
-                <div style={{ marginTop: '4px', padding: '10px 12px', backgroundColor: r.estado === 'rechazado' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(74, 124, 89, 0.1)', border: r.estado === 'rechazado' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(74, 124, 89, 0.3)', borderRadius: '10px', fontSize: '12px', lineHeight: 1.4 }}>
-                  <strong style={{ color: r.estado === 'rechazado' ? '#EF4444' : '#4a7c59', display: 'block', marginBottom: '2px' }}>
+                <div style={{ marginTop: '4px', padding: '10px 12px', backgroundColor: r.estado === 'rechazado' ? 'var(--peligro-suave)' : 'var(--marca-suave)', border: r.estado === 'rechazado' ? '1px solid var(--peligro)' : '1px solid var(--marca-borde)', borderRadius: '10px', fontSize: '12px', lineHeight: 1.4 }}>
+                  <strong style={{ color: r.estado === 'rechazado' ? 'var(--peligro)' : 'var(--marca)', display: 'block', marginBottom: '2px' }}>
                     {r.estado === 'rechazado' ? 'Motivo del rechazo:' : '✅ Programado para recolección:'}
                   </strong>
-                  <span style={{ color: '#e2e8f0' }}>{r.justificacion_rechazo}</span>
+                  <span style={{ color: 'var(--texto-2)' }}>{r.justificacion_rechazo}</span>
                 </div>
               )}
             </div>

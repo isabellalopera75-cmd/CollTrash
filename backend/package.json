@@ -7,7 +7,15 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "lint": "eslint src/**/*.js",
-    "test": "jest"
+    "test": "jest",
+    "migrar": "node scripts/migrar.js",
+    "migrar:estado": "node scripts/migrar.js --estado"
+  },
+  "jest": {
+    "//": "Solo se recogen las pruebas de tests/. En la raiz del backend quedan scripts sueltos de depuracion (test.js, test2.js, ...) que jest tomaba por suites: uno de ellos llama a process.exit() y hacia fallar npm test entero pese a que las pruebas reales pasaban.",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ]
   },
   "keywords": [],
   "author": "",

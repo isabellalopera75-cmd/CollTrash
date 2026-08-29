@@ -25,6 +25,7 @@ yarn-error.log*
 # Database and Backups
 *.sql
 !backend/src/migrations/*.sql
+!backend/scripts/*.sql
 *.txt
 backend/scratch/
 
@@ -33,3 +34,9 @@ backend/scratch/
 .idea/
 *.swp
 *.swo
+
+# Imagenes subidas por ciudadanos (datos de usuario, no codigo)
+backend/uploads/
+
+# Respaldos de base de datos
+backend/backups/

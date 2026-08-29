@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login } from '../../services/api';
+import { login, solicitarRecuperacion } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 
@@ -16,6 +16,9 @@ export default function Login() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
+  // Modo recuperación: reemplaza el formulario mientras se pide el enlace.
+  const [recuperando, setRecuperando] = useState(false);
+  const [avisoRecuperacion, setAvisoRecuperacion] = useState('');
   const { setUsuario } = useAuth();
   const navigate = useNavigate();
 
@@ -28,6 +31,28 @@ export default function Login() {
       document.body.style.backgroundColor = prevBg;
     };
   }, []);
+
+  /**
+   * Pide el enlace de recuperación.
+   *
+   * Sirve para los tres roles: el servidor no distingue quién pide, sólo que
+   * la cuenta exista y esté activa. La respuesta es la misma en todo caso,
+   * para no convertir la pantalla en un detector de cuentas.
+   */
+  const handleRecuperar = async (e) => {
+    e.preventDefault();
+    if (!form.email.trim()) return;
+    setCargando(true);
+    setError('');
+    try {
+      const res = await solicitarRecuperacion(form.email.trim().toLowerCase());
+      setAvisoRecuperacion(res.data.mensaje);
+    } catch (err) {
+      setError(err.response?.data?.mensaje || 'No pudimos procesar la solicitud. Intente de nuevo.');
+    } finally {
+      setCargando(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -56,7 +81,19 @@ export default function Login() {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'Credenciales incorrectas.');
+      // Un fallo de red o un error del servidor no son unas credenciales malas.
+      // Mostrarlo todo como "Credenciales incorrectas" escondio durante la
+      // prueba desde el movil un rechazo de CORS que nada tenia que ver con la
+      // contrasena, y llevo a buscar el problema en la base de datos.
+      if (!err.response) {
+        setError('No se pudo contactar con el servidor. Revise su conexion e intentelo de nuevo.');
+      } else if (err.response.data?.mensaje) {
+        setError(err.response.data.mensaje);
+      } else if (err.response.status === 401) {
+        setError('Credenciales incorrectas.');
+      } else {
+        setError(`Error del servidor (${err.response.status}). Intentelo de nuevo o avise al administrador.`);
+      }
     } finally {
       setCargando(false);
     }
@@ -74,8 +111,8 @@ export default function Login() {
 
       {/* TOPBAR */}
       <div className="login-topbar">
-        <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '2px', color: '#fff' }}>
-          COLL<span style={{ color: 'transparent', WebkitTextStroke: '1px #fff' }}>TRASH</span>
+        <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '2px', color: 'var(--texto)' }}>
+          COLL<span style={{ color: 'transparent', WebkitTextStroke: '1px var(--texto)' }}>TRASH</span>
         </div>
         <div className="login-topbar-status">
           <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-primary)', animation: 'blink 1.5s infinite' }}></div>
@@ -90,8 +127,8 @@ export default function Login() {
         right: '40px',
         transform: 'rotate(-90deg)',
         transformOrigin: 'right bottom',
-        fontSize: '10px',
-        color: '#222',
+        fontSize: '12px',
+        color: 'var(--texto)',
         fontWeight: 600,
         letterSpacing: '3px',
         zIndex: 10
@@ -105,8 +142,8 @@ export default function Login() {
         bottom: '40px',
         left: '50%',
         transform: 'translateX(-50%)',
-        fontSize: '10px',
-        color: '#333',
+        fontSize: '12px',
+        color: 'var(--texto-2)',
         fontWeight: 600,
         letterSpacing: '1px',
         zIndex: 10
@@ -125,8 +162,69 @@ export default function Login() {
         <div className="login-form-container">
           
           <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, letterSpacing: '3px', marginBottom: '32px' }}>
-            ACCESO AL SISTEMA
+            {recuperando ? 'RECUPERAR ACCESO' : 'ACCESO AL SISTEMA'}
           </div>
+
+          {/* Vista de recuperacion: ocupa el sitio del formulario en lugar de
+              abrir otra pantalla. El correo ya esta escrito y se arrastra. */}
+          {recuperando ? (
+            <>
+              <button
+                type="button"
+                onClick={() => { setRecuperando(false); setAvisoRecuperacion(''); setError(''); }}
+                style={{ background: 'none', border: 'none', color: 'var(--texto-2)', fontSize: '11px', cursor: 'pointer', marginBottom: '24px', padding: 0, fontFamily: 'inherit', letterSpacing: '1px' }}
+              >
+                &larr; Volver al acceso
+              </button>
+
+              <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--texto)', marginBottom: '8px' }}>
+                &iquest;Olvid&oacute; su contrase&ntilde;a?
+              </h2>
+              <p style={{ fontSize: '13px', color: 'var(--texto-2)', lineHeight: 1.6, marginBottom: '32px' }}>
+                Escriba el correo de su cuenta y le enviaremos un enlace para elegir una nueva. Caduca en 30 minutos.
+              </p>
+
+              {avisoRecuperacion ? (
+                <div style={{ padding: '16px', background: 'var(--marca-suave)', border: '1px solid var(--marca-borde)', borderRadius: '10px', fontSize: '13px', lineHeight: 1.55, color: 'var(--texto)' }}>
+                  <i className="bi bi-envelope-check" style={{ marginRight: '8px', color: 'var(--color-primary)' }}></i>
+                  {avisoRecuperacion}
+                  <div style={{ fontSize: '12px', color: 'var(--texto-2)', marginTop: '10px' }}>
+                    Revise tambi&eacute;n la carpeta de correo no deseado.
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleRecuperar}>
+                  {error && (
+                    <div style={{ color: 'var(--peligro)', fontSize: '11px', marginBottom: '20px', letterSpacing: '0.5px' }}>{error}</div>
+                  )}
+                  <div style={{ position: 'relative', marginBottom: '32px' }}>
+                    <label style={{ position: 'absolute', top: '-20px', left: 0, fontSize: '12px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTR&Oacute;NICO</label>
+                    <input
+                      type="email"
+                      required
+                      value={form.email}
+                      onChange={e => setForm({ ...form, email: e.target.value })}
+                      placeholder="usuario@colltrash.com"
+                      style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid color-mix(in oklch, var(--color-primary), transparent 70%)', color: 'var(--texto)', fontSize: '16px', padding: '10px 0', outline: 'none', caretColor: 'var(--color-primary)' }}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={cargando || !form.email.trim()}
+                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '16px', cursor: cargando ? 'wait' : 'pointer', padding: 0, opacity: (cargando || !form.email.trim()) ? 0.5 : 1 }}
+                  >
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marca-contraste)' }}>
+                      <i className="bi bi-arrow-right"></i>
+                    </div>
+                    <span style={{ fontSize: '13px', color: 'var(--texto)', fontWeight: 800, letterSpacing: '3px' }}>
+                      {cargando ? 'ENVIANDO...' : 'ENVIAR ENLACE'}
+                    </span>
+                  </button>
+                </form>
+              )}
+            </>
+          ) : (
+          <>
 
           <div className="login-tabs-container">
             {roles.map(r => (
@@ -135,7 +233,7 @@ export default function Login() {
                 className="login-tab-btn"
                 onClick={() => { setRolSeleccionado(r.key); setError(''); }}
                 style={{
-                  color: rolSeleccionado === r.key ? '#fff' : '#555',
+                  color: rolSeleccionado === r.key ? 'var(--texto)' : 'var(--texto-2)',
                   borderBottom: `2px solid ${rolSeleccionado === r.key ? 'var(--color-primary)' : 'transparent'}`
                 }}
               >
@@ -145,20 +243,20 @@ export default function Login() {
           </div>
 
           {error && (
-            <div style={{ color: '#ef4444', fontSize: '11px', marginBottom: '20px', letterSpacing: '0.5px' }}>
+            <div style={{ color: 'var(--peligro)', fontSize: '11px', marginBottom: '20px', letterSpacing: '0.5px' }}>
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
             {esCiudadano ? (
-              <div style={{ fontSize: '13px', color: '#666', lineHeight: 1.6, marginBottom: '20px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--texto-2)', lineHeight: 1.6, marginBottom: '20px' }}>
                 Accede al Portal Ciudadano para consultar horarios, reportar y hacer seguimiento en vivo.
               </div>
             ) : (
               <>
                 <div style={{ position: 'relative' }}>
-                  <label style={{ position: 'absolute', top: '-20px', left: 0, fontSize: '10px', color: '#666', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTRÓNICO</label>
+                  <label style={{ position: 'absolute', top: '-20px', left: 0, fontSize: '12px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>CORREO ELECTRÓNICO</label>
                   <input
                     type="email" required
                     value={form.email}
@@ -169,7 +267,7 @@ export default function Login() {
                       background: 'transparent',
                       border: 'none',
                       borderBottom: '1px solid color-mix(in oklch, var(--color-primary), transparent 70%)',
-                      color: '#fff',
+                      color: 'var(--texto)',
                       fontSize: '18px',
                       padding: '10px 0',
                       outline: 'none',
@@ -183,7 +281,7 @@ export default function Login() {
                 </div>
 
                 <div style={{ position: 'relative', marginTop: '10px' }}>
-                  <label style={{ position: 'absolute', top: '-20px', left: 0, fontSize: '10px', color: '#666', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
+                  <label style={{ position: 'absolute', top: '-20px', left: 0, fontSize: '12px', color: 'var(--texto-2)', fontWeight: 700, letterSpacing: '2px' }}>CONTRASEÑA</label>
                   <input
                     type={mostrarPassword ? 'text' : 'password'} required
                     value={form.password}
@@ -194,7 +292,7 @@ export default function Login() {
                       background: 'transparent',
                       border: 'none',
                       borderBottom: '1px solid color-mix(in oklch, var(--color-primary), transparent 70%)',
-                      color: '#fff',
+                      color: 'var(--texto)',
                       fontSize: '18px',
                       padding: '10px 36px 10px 0',
                       outline: 'none',
@@ -208,11 +306,19 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => setMostrarPassword(!mostrarPassword)}
-                    style={{ position: 'absolute', right: 0, bottom: '12px', background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0 }}
+                    aria-label={mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    style={{ position: 'absolute', right: 0, bottom: '2px', background: 'none', border: 'none', color: 'var(--texto-2)', cursor: 'pointer', minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', padding: 0 }}
                   >
                     <i className={`bi ${mostrarPassword ? 'bi-eye-slash' : 'bi-eye'}`} style={{ fontSize: '16px' }}></i>
                   </button>
-                  <div style={{ position: 'absolute', right: 0, top: '-20px', fontSize: '10px', color: '#666', cursor: 'pointer', letterSpacing: '1px' }}>¿Olvidaste?</div>
+                  {/* Antes era un <div> sin accion. */}
+                  <button
+                    type="button"
+                    onClick={() => { setRecuperando(true); setError(''); setAvisoRecuperacion(''); }}
+                    style={{ position: 'absolute', right: 0, top: '-20px', fontSize: '12px', color: 'var(--texto-2)', cursor: 'pointer', letterSpacing: '1px', background: 'none', border: 'none', padding: 0, fontFamily: 'inherit', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+                  >
+                    ¿Olvidaste?
+                  </button>
                 </div>
               </>
             )}
@@ -239,19 +345,21 @@ export default function Login() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: '#000',
+                  color: 'var(--marca-contraste)',
                   fontSize: '20px',
                   transition: 'transform 0.2s',
                   transform: cargando ? 'scale(0.9)' : 'scale(1)'
                 }}>
                   {cargando ? <i className="bi bi-arrow-repeat" style={{ animation: 'spin 1s linear infinite' }}></i> : <i className="bi bi-arrow-right"></i>}
                 </div>
-                <span style={{ fontSize: '15px', color: '#fff', fontWeight: 800, letterSpacing: '4px' }}>
+                <span style={{ fontSize: '15px', color: 'var(--texto)', fontWeight: 800, letterSpacing: '4px' }}>
                   {cargando ? 'VERIFICANDO...' : 'INGRESAR'}
                 </span>
               </button>
             </div>
           </form>
+          </>
+          )}
 
         </div>
       </div>
@@ -266,16 +374,7 @@ export default function Login() {
           100% { transform: rotate(360deg); }
         }
         input::placeholder {
-          color: rgba(255, 255, 255, 0.2);
-        }
-        /* Fix Chrome autofill background */
-        .transparent-input:-webkit-autofill,
-        .transparent-input:-webkit-autofill:hover, 
-        .transparent-input:-webkit-autofill:focus, 
-        .transparent-input:-webkit-autofill:active {
-            -webkit-box-shadow: 0 0 0 30px var(--bg-global) inset !important;
-            -webkit-text-fill-color: white !important;
-            transition: background-color 5000s ease-in-out 0s;
+          color: var(--texto-3);
         }
       `}</style>
     </div>

@@ -3,10 +3,11 @@ const { getFechaColombia } = require('../utils/dateUtils');
 
 const dashboardDiario = async (req, res) => {
   try {
-    // Usar fecha local (Colombia) en lugar de UTC para evitar desfases nocturnos
-    const ahora = new Date();
-    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-    const hoy = ahora.toISOString().split('T')[0];
+    // getFechaColombia y no aritmetica sobre getTimezoneOffset: lo anterior
+    // devolvia la fecha local del servidor, que solo coincide con la de
+    // Colombia mientras el servidor este en Colombia. El helper ya estaba
+    // importado en este archivo pero no se usaba.
+    const hoy = getFechaColombia();
 
     const rutas = await pool.query(
       `SELECT 
@@ -52,10 +53,8 @@ const dashboardDiario = async (req, res) => {
 
 const dashboardSemanal = async (req, res) => {
   try {
-    // Misma lógica que dashboardDiario para obtener "hoy" en Colombia
-    const ahora = new Date();
-    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-    const hoy = ahora.toISOString().split('T')[0];
+    // Misma referencia horaria que dashboardDiario (America/Bogota).
+    const hoy = getFechaColombia();
 
     const resultado = await pool.query(
       `SELECT 
@@ -101,7 +100,9 @@ const dashboardMensual = async (req, res) => {
        FROM mv_eficiencia_rutas e
        JOIN asignaciones_semanales a ON a.id = e.asignacion_id
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-       JOIN usuarios u ON u.id = rf.conductor_default_id
+       -- Mismo criterio que el informe de eficiencia: el promedio de
+       -- cumplimiento se acredita a quien condujo la jornada.
+       JOIN usuarios u ON u.id = COALESCE(a.conductor_id, rf.conductor_default_id)
        WHERE a.fecha BETWEEN $1 AND $2
        GROUP BY u.nombre`,
       [primerDia.toISOString().split('T')[0], ultimoDia.toISOString().split('T')[0]]
@@ -133,8 +134,13 @@ const reporteEficiencia = async (req, res) => {
       FROM mv_eficiencia_rutas e
       JOIN asignaciones_semanales a ON a.id = e.asignacion_id
       JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-      JOIN usuarios u ON u.id = rf.conductor_default_id
-      JOIN vehiculos v ON v.id = rf.vehiculo_id
+      -- Tripulación efectiva de la jornada, no la configuración base de la ruta
+      -- (RNF-12). Leyendo rutas_fijas, toda jornada cubierta por un relevo o
+      -- por una reasignación quedaba acreditada al conductor titular: el
+      -- reemplazo no aparecía en el informe y el titular figuraba con
+      -- toneladas y kilómetros que no hizo.
+      JOIN usuarios  u ON u.id = COALESCE(a.conductor_id, rf.conductor_default_id)
+      JOIN vehiculos v ON v.id = COALESCE(a.vehiculo_id, rf.vehiculo_id)
       WHERE a.fecha BETWEEN $1 AND $2
       ORDER BY a.fecha DESC
     `;
@@ -153,12 +159,31 @@ const reporteEficiencia = async (req, res) => {
 
 const obtenerNovedadesOperativas = async (req, res) => {
   try {
+    // LEFT JOIN sobre usuarios y no JOIN interno.
+    //
+    // Las novedades tienen dos orígenes: las que registra el administrador
+    // (REACTIVACION_MANUAL, con su admin_id) y las que registra el propio
+    // conductor al justificar un inicio tardío (RF-26), que se guardan con
+    // admin_id NULL porque ningún administrador interviene.
+    //
+    // Con el JOIN interno esas últimas se descartaban en silencio: la
+    // justificación se pedía al conductor, se guardaba en la base y no llegaba
+    // nunca al panel. La tabla del historial ya estaba preparada para
+    // mostrarlas y ese código no se había ejecutado jamás.
+    //
+    // Se trae además el conductor de la asignación, para que el administrador
+    // vea quién llegó tarde y no un genérico.
     const resultado = await pool.query(
-      `SELECT n.*, u.nombre AS admin_nombre, rf.nombre AS ruta_nombre, a.fecha AS fecha_asignacion
+      `SELECT n.*,
+              u.nombre  AS admin_nombre,
+              uc.nombre AS conductor_nombre,
+              rf.nombre AS ruta_nombre,
+              a.fecha   AS fecha_asignacion
        FROM novedades_operativas n
-       JOIN usuarios u ON u.id = n.admin_id
        JOIN asignaciones_semanales a ON a.id = n.asignacion_id
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
+       LEFT JOIN usuarios u  ON u.id  = n.admin_id
+       LEFT JOIN usuarios uc ON uc.id = COALESCE(a.conductor_id, rf.conductor_default_id)
        ORDER BY n.fecha DESC LIMIT 100`
     );
     res.json({ novedades: resultado.rows });

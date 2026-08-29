@@ -3,6 +3,21 @@ const { generarAsignaciones } = require('../services/cronService');
 const { registrarActividad } = require('../services/auditoriaService');
 
 // Crear ruta fija
+/**
+ * Normaliza los dias de repeticion a un arreglo de enteros ISO (1=lunes .. 7=domingo).
+ *
+ * El formulario envia unas veces la cadena "1,3,5" y otras el arreglo [1,3,5].
+ * Al asumir siempre cadena, `dias_semana.split` lanzaba TypeError y la creacion
+ * de la ruta respondia 500 sin explicar nada.
+ */
+const normalizarDias = (dias) => {
+  const bruto = Array.isArray(dias) ? dias : String(dias ?? '').split(',');
+  const limpios = bruto
+    .map(d => parseInt(String(d).trim(), 10))
+    .filter(d => Number.isInteger(d) && d >= 1 && d <= 7);
+  return [...new Set(limpios)].sort((a, b) => a - b);
+};
+
 const crearRutaFija = async (req, res) => {
   const { nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana, sectores } = req.body;
 
@@ -57,7 +72,10 @@ const crearRutaFija = async (req, res) => {
     }
 
     // NUEVA VALIDACIÓN: REGLA DE ORO (No repetir jornada/día para Conductor o Vehículo)
-    const diasNuevos = dias_semana.split(',').map(Number);
+    const diasNuevos = normalizarDias(dias_semana);
+    if (diasNuevos.length === 0) {
+      return res.status(400).json({ mensaje: 'Debe indicar al menos un día de la semana válido (1 = lunes … 7 = domingo).' });
+    }
 
     let rutaFija;
     const client = await pool.connect();
@@ -93,15 +111,10 @@ const crearRutaFija = async (req, res) => {
       }
 
       // Guardar la ruta principal
-      const diasArray = dias_semana
-        .split(',')
-        .map(d => parseInt(d.trim()))
-        .filter(d => !isNaN(d));
-
       const resultado = await client.query(
         `INSERT INTO rutas_fijas (nombre, jornada_id, conductor_default_id, vehiculo_id, dias_semana_arr)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [nombre, jornada_id, conductor_default_id, vehiculo_id, diasArray]
+        [nombre, jornada_id, conductor_default_id, vehiculo_id, diasNuevos]
       );
 
     rutaFija = resultado.rows[0];
@@ -278,7 +291,7 @@ const editarRutaFija = async (req, res) => {
         [c_id, v_id, j_id, id]
       );
 
-      const diasNuevos = typeof d_sem === 'string' ? d_sem.split(',').map(Number) : d_sem;
+      const diasNuevos = normalizarDias(d_sem);
 
       for (const rx of rExistentes.rows) {
         const diasOcupados = rx.dias_semana_arr || [];
@@ -294,6 +307,8 @@ const editarRutaFija = async (req, res) => {
       }
     }
 
+    const diasEditados = normalizarDias(dias_semana);
+
     const resultado = await pool.query(
       `UPDATE rutas_fijas 
        SET nombre = COALESCE($1, nombre),
@@ -305,9 +320,10 @@ const editarRutaFija = async (req, res) => {
        WHERE id = $7
        RETURNING *`,
       [nombre, jornada_id, conductor_default_id, vehiculo_id,
-       (dias_semana && typeof dias_semana === 'string')
-         ? dias_semana.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d))
-         : dias_semana,
+       // null y no [] cuando no llegan dias validos: con un arreglo vacio el
+       // COALESCE de arriba lo daria por valor bueno y la ruta se quedaria sin
+       // ningun dia de repeticion, dejando de generar asignaciones.
+       diasEditados.length > 0 ? diasEditados : null,
        activo, id]
     );
 
@@ -315,28 +331,81 @@ const editarRutaFija = async (req, res) => {
       return res.status(404).json({ mensaje: 'Ruta no encontrada.' });
     }
 
-    // Si vienen sectores, actualizamos el primero de forma segura y limpiamos posibles duplicados
-    if (sectores && sectores.length > 0) {
-      const sector = sectores[0];
-      const sectorUpdate = await pool.query(
-        `UPDATE sectores_ruta SET trazado_geom = $1, nombre = $2 
-         WHERE id = (SELECT id FROM sectores_ruta WHERE ruta_fija_id = $3 ORDER BY id ASC LIMIT 1) RETURNING id`,
-        [sector.trazado_geom, sector.nombre, id]
-      );
-      
-      if (sectorUpdate.rows.length === 0) {
-        await pool.query(
-          `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_requerido)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [id, sector.nombre, 1, sector.trazado_geom, sector.porcentaje_requerido !== undefined ? sector.porcentaje_requerido : 90]
+    // Sincronizar los sectores de la ruta (RF-11: una ruta se divide en varios
+    // sectores, cada uno con su nombre y su orden de visita).
+    //
+    // Antes se actualizaba sólo el primero y se borraba el resto sin más. Con
+    // eso, una ruta de tres sectores quedaba reducida a uno en la primera
+    // edición, y el borrado directo habría reventado contra la clave foránea
+    // de sectores_asignacion en cuanto un sector tuviera jornadas asociadas.
+    if (Array.isArray(sectores) && sectores.length > 0) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        const existentes = await client.query(
+          'SELECT id FROM sectores_ruta WHERE ruta_fija_id = $1 ORDER BY orden ASC, id ASC',
+          [id]
         );
-      } else {
-        // Borrar cualquier sector extra que haya quedado por duplicación previa
-        await pool.query(
-          `DELETE FROM sectores_ruta WHERE ruta_fija_id = $1 AND id != $2`,
-          [id, sectorUpdate.rows[0].id]
-        );
+
+        // Se reaprovechan las filas existentes por posición para no romper las
+        // referencias del historial: el sector 1 sigue siendo el sector 1.
+        for (let i = 0; i < sectores.length; i++) {
+          const sector = sectores[i];
+          const porcentaje = sector.porcentaje_requerido !== undefined ? sector.porcentaje_requerido : 90;
+
+          if (existentes.rows[i]) {
+            await client.query(
+              `UPDATE sectores_ruta
+                  SET nombre = $1, orden = $2, trazado_geom = $3, porcentaje_requerido = $4
+                WHERE id = $5`,
+              [sector.nombre, i + 1, sector.trazado_geom, porcentaje, existentes.rows[i].id]
+            );
+          } else {
+            await client.query(
+              `INSERT INTO sectores_ruta (ruta_fija_id, nombre, orden, trazado_geom, porcentaje_requerido)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [id, sector.nombre, i + 1, sector.trazado_geom, porcentaje]
+            );
+          }
+        }
+
+        // Sectores que sobran porque la ruta se rediseñó con menos tramos.
+        const sobrantes = existentes.rows.slice(sectores.length).map(r => r.id);
+        if (sobrantes.length > 0) {
+          // Primero se desvinculan de las jornadas que aún no se han ejecutado,
+          // igual que hace la baja de una ruta: el historial no se toca.
+          await client.query(
+            `DELETE FROM sectores_asignacion sa
+              USING asignaciones_semanales a
+              WHERE sa.asignacion_id = a.id
+                AND sa.sector_id = ANY($1::int[])
+                AND a.estado = 'pendiente'
+                AND a.fecha >= CURRENT_DATE`,
+            [sobrantes]
+          );
+
+          try {
+            await client.query('DELETE FROM sectores_ruta WHERE id = ANY($1::int[])', [sobrantes]);
+          } catch (errBorrado) {
+            if (errBorrado.code === '23503') {
+              await client.query('ROLLBACK');
+              client.release();
+              return res.status(400).json({
+                mensaje: 'No se pueden quitar sectores que ya tienen jornadas ejecutadas. Reduzca el recorrido creando una ruta nueva.'
+              });
+            }
+            throw errBorrado;
+          }
+        }
+
+        await client.query('COMMIT');
+      } catch (txError) {
+        await client.query('ROLLBACK');
+        client.release();
+        throw txError;
       }
+      client.release();
     }
 
     // Sincronizar asignaciones semanales con el cambio
@@ -458,9 +527,38 @@ const crearVehiculo = async (req, res) => {
   }
 
   try {
+    const placaUpper = placa.toUpperCase();
+    
+    // Verificar si el vehículo ya existe
+    const existeVehiculo = await pool.query('SELECT id, activo FROM vehiculos WHERE placa = $1', [placaUpper]);
+    
+    if (existeVehiculo.rows.length > 0) {
+      const v = existeVehiculo.rows[0];
+      if (v.activo) {
+        return res.status(400).json({ mensaje: 'Ya existe un vehículo registrado y activo con esa placa.' });
+      } else {
+        // Reactivar
+        const resultado = await pool.query(
+          'UPDATE vehiculos SET modelo = $1, capacidad_ton = $2, activo = TRUE WHERE id = $3 RETURNING *',
+          [modelo, cap, v.id]
+        );
+        await registrarActividad(
+          req.usuario?.id, 
+          'Reactivación de Vehículo', 
+          'vehiculos', 
+          v.id, 
+          `Se reactivó el vehículo previamente inactivo: ${placaUpper}`
+        );
+        return res.status(200).json({ 
+          mensaje: 'El vehículo estaba inactivo y ha sido reactivado exitosamente con los nuevos datos.', 
+          vehiculo: resultado.rows[0] 
+        });
+      }
+    }
+
     const resultado = await pool.query(
-      'INSERT INTO vehiculos (placa, modelo, capacidad_ton) VALUES ($1, $2, $3) RETURNING *',
-      [placa.toUpperCase(), modelo, cap]
+      'INSERT INTO vehiculos (placa, modelo, capacidad_ton, activo) VALUES ($1, $2, $3, TRUE) RETURNING *',
+      [placaUpper, modelo, cap]
     );
     // Auditoría
     await registrarActividad(
@@ -468,7 +566,7 @@ const crearVehiculo = async (req, res) => {
       'Registro de Vehículo', 
       'vehiculos', 
       resultado.rows[0].id, 
-      `Se registró el vehículo: ${placa.toUpperCase()}`
+      `Se registró el vehículo: ${placaUpper}`
     );
 
     res.status(201).json({ mensaje: 'Vehículo registrado', vehiculo: resultado.rows[0] });
@@ -523,6 +621,79 @@ const editarVehiculo = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ mensaje: 'Error al editar vehículo' });
+  }
+};
+
+// Eliminar vehículo
+const eliminarVehiculo = async (req, res) => {
+  const { id } = req.params;
+  try {
+    // 1. Verificar si está en rutas fijas activas
+    const rutasActivas = await pool.query(
+      `SELECT id, nombre FROM rutas_fijas WHERE vehiculo_id = $1 LIMIT 1`,
+      [id]
+    );
+    if (rutasActivas.rows.length > 0) {
+      return res.status(400).json({ 
+        mensaje: `No se puede eliminar: El vehículo está asignado a la ruta "${rutasActivas.rows[0].nombre}". Debes editar la ruta y cambiar el vehículo primero.` 
+      });
+    }
+
+    // 2. Verificar si tiene asignaciones pendientes o activas actuales/futuras
+    const asignacionesPendientes = await pool.query(
+      `SELECT id FROM asignaciones_semanales 
+       WHERE vehiculo_id = $1 
+         AND estado IN ('activa', 'pendiente') 
+         AND fecha >= CURRENT_DATE 
+       LIMIT 1`,
+      [id]
+    );
+    if (asignacionesPendientes.rows.length > 0) {
+      return res.status(400).json({ 
+        mensaje: 'No se puede eliminar: El vehículo tiene asignaciones de ruta pendientes o en curso.' 
+      });
+    }
+
+    const resultado = await pool.query(
+      `DELETE FROM vehiculos WHERE id = $1 RETURNING id, placa`,
+      [id]
+    );
+
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ mensaje: 'Vehículo no encontrado' });
+    }
+
+    await registrarActividad(
+      req.usuario?.id,
+      'Eliminación de Vehículo',
+      'vehiculos',
+      id,
+      `Se eliminó el vehículo: ${resultado.rows[0].placa}`
+    );
+    res.json({ mensaje: 'Vehículo eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error al eliminar vehículo:', error.message);
+    if (error.code === '23503') {
+      try {
+        const inactivado = await pool.query(
+          `UPDATE vehiculos SET activo = FALSE WHERE id = $1 RETURNING id, placa`,
+          [id]
+        );
+        if (inactivado.rows.length > 0) {
+          await registrarActividad(
+            req.usuario?.id,
+            'Inactivación de Vehículo',
+            'vehiculos',
+            id,
+            `Se inactivó el vehículo debido a historial operativo: ${inactivado.rows[0].placa}`
+          );
+          return res.json({ mensaje: 'El vehículo fue inactivado exitosamente (no pudo ser borrado definitivamente debido a historial operativo asociado).' });
+        }
+      } catch (inactivarError) {
+        console.error('Error al inactivar vehículo:', inactivarError.message);
+      }
+    }
+    res.status(500).json({ mensaje: 'Error interno al eliminar vehículo' });
   }
 };
 
@@ -603,7 +774,7 @@ const editarJornada = async (req, res) => {
     const solapas = await verificarSolapaJornada(inicio, fin, id);
     if (solapas.length > 0) {
       return res.status(409).json({
-        mensaje: `El horario se solapa con la jornada "${solapas[0].nombre}" (${solapas[0].hora_inicio} - ${solapas[0].hora_limite_fin}). Ajusta las horas.`
+        mensaje: `El nuevo horario se solapa con la jornada "${solapas[0].nombre}" (${solapas[0].hora_inicio} - ${solapas[0].hora_limite_fin}).`
       });
     }
 
@@ -621,7 +792,7 @@ const editarJornada = async (req, res) => {
       'Edición de Jornada', 
       'jornadas', 
       id, 
-      `Se modificó la jornada: ${resultado.rows[0].nombre}`
+      `Se editó la jornada: ${resultado.rows[0].nombre}`
     );
 
     res.json({ mensaje: 'Jornada actualizada', jornada: resultado.rows[0] });
@@ -751,6 +922,7 @@ module.exports = {
   obtenerJornadas,
   crearVehiculo,
   editarVehiculo,
+  eliminarVehiculo,
   crearJornada,
   editarJornada,
   obtenerRecursosLibres

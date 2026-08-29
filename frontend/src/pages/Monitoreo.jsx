@@ -121,7 +121,11 @@ function MonitoreoContent() {
     socketRef.current = io(socketUrl, {
       auth: { token }
     });
-    
+
+    // Se conserva la instancia en una variable local para que la limpieza
+    // desconecte siempre este socket y no lo que la ref contenga más adelante.
+    const socket = socketRef.current;
+
     socketRef.current.on('ubicacion_vehiculo', (data) => {
       setVehiculos(prev => {
         const existe = prev.find(v => v.id === data.id);
@@ -132,9 +136,7 @@ function MonitoreoContent() {
       });
     });
 
-    socketRef.current.on('nueva_novedad', (data) => {
-      alert(`⚠️ Novedad del Conductor ${data.conductor}:\n\n${data.mensaje}`);
-    });
+
 
     socketRef.current.on('ruta_finalizada', (data) => {
       setVehiculos(prev => prev.filter(v => v.asignacion_id !== data.asignacion_id));
@@ -150,7 +152,10 @@ function MonitoreoContent() {
       localStorage.setItem('colltrash_incidencias_descartadas', JSON.stringify(descartadas.filter(id => id !== incidencia_id)));
     });
 
-    return () => socketRef.current.disconnect();
+    return () => {
+      socket.disconnect();
+      if (socketRef.current === socket) socketRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -187,7 +192,8 @@ function MonitoreoContent() {
              En vivo
            </div>
            <div style={{ color: 'var(--text-muted)', fontSize: '13px', textTransform: 'capitalize' }}>
-             📅 {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+             <i className="bi bi-calendar3" style={{ marginRight: '8px' }}></i>
+             {new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
            </div>
         </div>
       </div>
@@ -250,7 +256,7 @@ function MonitoreoContent() {
                 pathOptions={{ color: getStatusColor(v.estado), fillColor: getStatusColor(v.estado), fillOpacity: 0.8 }}
               >
                  <Popup>
-                   <div style={{ color: '#000', fontSize: '12px', padding: '4px' }}>
+                   <div style={{ color: '#111', fontSize: '12px', padding: '4px' }}>
                      <strong style={{ fontSize: '13px' }}>{v.cod}</strong> ({v.conductor})<br />
                      <span style={{ color: getStatusColor(v.estado), fontWeight: 'bold' }}>
                        ● {v.estado === 'en_descarga' ? v.sector : v.estado === 'regresando_a_ruta' ? 'Regresando a ruta' : v.estado.replace('_', ' ')}
@@ -291,10 +297,10 @@ function MonitoreoContent() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
           <div className="card" style={{ width: '450px', border: '1px solid var(--color-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', color: 'white', textTransform: 'capitalize' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--texto)', textTransform: 'capitalize' }}>
                 Gestionar: {incidenciaSeleccionada.tipo.replace('_', ' ')}
               </h3>
-              <button onClick={() => setIncidenciaSeleccionada(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+              <button onClick={() => setIncidenciaSeleccionada(null)} style={{ background: 'none', border: 'none', color: 'var(--texto)', cursor: 'pointer' }}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -304,12 +310,12 @@ function MonitoreoContent() {
               {/* CASO 1: operario_lesionado */}
               {incidenciaSeleccionada.tipo === 'operario_lesionado' && (
                 <>
-                  <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', padding: '15px', borderRadius: '8px', textAlign: 'center' }}>
-                    <i className="bi bi-telephone-outbound-fill" style={{ fontSize: '24px', color: '#ef4444' }}></i>
-                    <h4 style={{ color: '#ef4444', margin: '10px 0 5px' }}>Ambulancia: {telefonos.telefono_ambulancia || 'Cargando...'}</h4>
+                  <div style={{ background: 'var(--peligro-suave)', border: '1px solid var(--peligro)', padding: '15px', borderRadius: '8px', textAlign: 'center' }}>
+                    <i className="bi bi-telephone-outbound-fill" style={{ fontSize: '24px', color: 'var(--peligro)' }}></i>
+                    <h4 style={{ color: 'var(--peligro)', margin: '10px 0 5px' }}>Ambulancia: {telefonos.telefono_ambulancia || 'Cargando...'}</h4>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Contacta a emergencias inmediatamente. No cierres este panel hasta haber despachado ayuda.</p>
                   </div>
-                  <button type="submit" className="btn btn-primary" style={{ background: '#ef4444', border: 'none', width: '100%', padding: '12px', fontWeight: 'bold' }}>
+                  <button type="submit" className="btn btn-primary" style={{ background: 'var(--peligro)', border: 'none', width: '100%', padding: '12px', fontWeight: 'bold' }}>
                     Marcar como Ambulancia Gestionada
                   </button>
                 </>
@@ -318,16 +324,16 @@ function MonitoreoContent() {
               {/* CASO 2: falla_motor o accidente */}
               {(incidenciaSeleccionada.tipo === 'falla_motor' || incidenciaSeleccionada.tipo === 'accidente') && (
                 <>
-                  <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '12px', borderRadius: '8px', textAlign: 'center', marginBottom: '8px' }}>
-                    <i className="bi bi-truck" style={{ fontSize: '20px', color: '#f59e0b' }}></i>
-                    <h4 style={{ color: '#f59e0b', margin: '5px 0' }}>Grúa de Rescate: {telefonos.telefono_grua || 'Cargando...'}</h4>
+                  <div style={{ background: 'var(--alerta-suave)', border: '1px solid var(--alerta)', padding: '12px', borderRadius: '8px', textAlign: 'center', marginBottom: '8px' }}>
+                    <i className="bi bi-truck" style={{ fontSize: '20px', color: 'var(--alerta)' }}></i>
+                    <h4 style={{ color: 'var(--alerta)', margin: '5px 0' }}>Grúa de Rescate: {telefonos.telefono_grua || 'Cargando...'}</h4>
                   </div>
 
                   {cargandoRecursos ? <p style={{ fontSize: '12px', textAlign: 'center' }}>Buscando personal y vehículos libres...</p> : (
                     <>
                       <div>
                         <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>1. Conductor de Relevo</label>
-                        <select required value={resolucionForm.nuevo_conductor_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_conductor_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }}>
+                        <select required value={resolucionForm.nuevo_conductor_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_conductor_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)' }}>
                           <option value="">Selecciona conductor libre...</option>
                           {recursosLibres.conductores
                             .filter(c => c.id !== incidenciaSeleccionada.conductor_id)
@@ -336,14 +342,14 @@ function MonitoreoContent() {
                       </div>
                       <div>
                         <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>2. Vehículo de Reemplazo</label>
-                        <select required value={resolucionForm.nuevo_vehiculo_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_vehiculo_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }}>
+                        <select required value={resolucionForm.nuevo_vehiculo_id} onChange={e => setResolucionForm({...resolucionForm, nuevo_vehiculo_id: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)' }}>
                           <option value="">Selecciona vehículo libre...</option>
                           {recursosLibres.vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa} ({v.capacidad_ton} Ton)</option>)}
                         </select>
                       </div>
                       <div>
                         <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>3. ETA Estimado de Rescate (Minutos)</label>
-                        <input required type="number" value={resolucionForm.eta_minutos} onChange={e => setResolucionForm({...resolucionForm, eta_minutos: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }} placeholder="Ej: 15" />
+                        <input required type="number" value={resolucionForm.eta_minutos} onChange={e => setResolucionForm({...resolucionForm, eta_minutos: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)' }} placeholder="Ej: 15" />
                       </div>
                     </>
                   )}
@@ -358,7 +364,7 @@ function MonitoreoContent() {
                 <>
                   <div>
                     <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Nota de Resolución (Opcional)</label>
-                    <textarea value={resolucionForm.resolucion} onChange={e => setResolucionForm({...resolucionForm, resolucion: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', minHeight: '80px', background: 'var(--bg-secondary)', border: 'none', color: 'white' }} placeholder="Ej: Se le indicó al conductor tomar la calle alterna..." />
+                    <textarea value={resolucionForm.resolucion} onChange={e => setResolucionForm({...resolucionForm, resolucion: e.target.value})} className="card" style={{ width: '100%', padding: '10px', marginTop: '4px', minHeight: '80px', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)' }} placeholder="Ej: Se le indicó al conductor tomar la calle alterna..." />
                   </div>
                   <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', fontWeight: 'bold' }}>
                     Cerrar Incidencia

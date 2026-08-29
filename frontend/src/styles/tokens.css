@@ -1,0 +1,279 @@
+/* ============================================================================
+   CollTrash — Sistema de diseño
+   ----------------------------------------------------------------------------
+   Fuente única de color, espaciado, tipografía y elevación.
+
+   Antes existían tres identidades visuales distintas conviviendo (panel
+   administrativo, portal ciudadano y pantalla de acceso), con 57 colores
+   escritos a mano y tres verdes diferentes, ninguno de los cuales era el color
+   corporativo declarado en la especificación. Toda la interfaz se apoya ahora
+   en estas variables.
+
+   MODOS
+     Claro (por defecto)  Portal ciudadano, panel del conductor y acceso. Ambas
+                          superficies se usan en la calle desde el teléfono, de
+                          modo que priorizan la legibilidad a plena luz del día.
+     Oscuro (.admin-shell) Panel del administrador. El fondo oscuro favorece la
+                          lectura del mapa de monitoreo y de las gráficas.
+   ========================================================================== */
+
+:root {
+  /* ── Escala de marca, derivada del verde corporativo #1B5E20 ───────────── */
+  --verde-50:  #F1F7F1;
+  --verde-100: #DDEEDE;
+  --verde-200: #BBDCBD;
+  --verde-300: #8FC593;
+  --verde-400: #5FA765;
+  --verde-500: #3A8942;
+  --verde-600: #26702C;
+  --verde-700: #1B5E20;   /* Color corporativo (RI-UI.1) */
+  --verde-800: #164B1A;
+  --verde-900: #0F3512;
+
+  /* ── Neutros con leve sesgo verde, para que armonicen con la marca ─────── */
+  --n-0:   #FFFFFF;
+  --n-25:  #F8FAF7;
+  --n-50:  #F2F5F1;
+  --n-100: #E7EBE5;
+  --n-200: #D6DCD4;
+  --n-300: #B9C2B7;
+  --n-400: #8D998C;
+  --n-500: #6B776A;
+  --n-600: #4F5A4E;
+  --n-700: #3A443A;
+  --n-800: #252D25;
+  --n-900: #171E17;
+  --n-950: #0E130E;
+
+  /* ── Colores semánticos, independientes de la marca ────────────────────── */
+  --rojo-claro:  #C0392B;
+  --rojo-oscuro: #EF8B7D;
+  --ambar-claro:  #A9700D;
+  --ambar-oscuro: #E5B54A;
+  --azul-claro:  #1F6F8B;
+  --azul-oscuro: #74B9D1;
+
+  /* ── Tipografía ────────────────────────────────────────────────────────── */
+  --f-texto: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --f-dato:  'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --t-xs:  0.75rem;   /* 12px */
+  --t-sm:  0.8125rem; /* 13px */
+  --t-md:  0.875rem;  /* 14px */
+  --t-base: 1rem;     /* 16px */
+  --t-lg:  1.125rem;  /* 18px */
+  --t-xl:  1.375rem;  /* 22px */
+  --t-2xl: 1.75rem;   /* 28px */
+  --t-3xl: 2.25rem;   /* 36px */
+
+  /* ── Espaciado ─────────────────────────────────────────────────────────── */
+  --e-1: 0.25rem;
+  --e-2: 0.5rem;
+  --e-3: 0.75rem;
+  --e-4: 1rem;
+  --e-5: 1.5rem;
+  --e-6: 2rem;
+  --e-7: 3rem;
+
+  /* ── Radios ────────────────────────────────────────────────────────────── */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-full: 999px;
+
+  /* ── Superficie táctil mínima (uso con guantes, en movimiento) ─────────── */
+  --toque: 48px;
+
+  /* ══ MODO CLARO (por defecto) ═══════════════════════════════════════════ */
+  --fondo:        var(--n-25);
+  --superficie:   var(--n-0);
+  --superficie-2: var(--n-50);
+  --superficie-3: var(--n-100);
+  --borde:        var(--n-200);
+  --borde-fuerte: var(--n-300);
+
+  --texto:   var(--n-900);
+  --texto-2: var(--n-600);
+  --texto-3: var(--n-500);
+
+  --marca:           var(--verde-700);
+  --marca-hover:     var(--verde-800);
+  --marca-suave:     var(--verde-100);
+  --marca-suave-2:   var(--verde-50);
+  --marca-contraste: var(--n-0);
+  --marca-borde:     var(--verde-200);
+
+  --peligro:       var(--rojo-claro);
+  --peligro-suave: #FBEAE7;
+  --alerta:        var(--ambar-claro);
+  --alerta-suave:  #FBF1DF;
+  --info:          var(--azul-claro);
+  --info-suave:    #E4F1F6;
+  --exito:         var(--verde-600);
+  --exito-suave:   var(--verde-100);
+
+  --sombra-1: 0 1px 2px rgba(23, 30, 23, .06);
+  --sombra-2: 0 1px 3px rgba(23, 30, 23, .08), 0 6px 16px -8px rgba(23, 30, 23, .16);
+  --sombra-3: 0 2px 6px rgba(23, 30, 23, .10), 0 16px 32px -16px rgba(23, 30, 23, .24);
+
+  --anillo: 0 0 0 3px rgba(27, 94, 32, .22);
+}
+
+/* ══ MODO OSCURO — panel del administrador ════════════════════════════════ */
+/*
+   .tema-oscuro aplica la misma paleta a un elemento que queda FUERA de
+   .admin-shell. Hace falta para las ventanas flotantes que se montan con
+   createPortal sobre <body>: al colgar del cuerpo del documento no descienden
+   del panel, heredaban el modo claro de :root y aparecían en blanco sobre la
+   interfaz oscura.
+*/
+.admin-shell,
+.tema-oscuro {
+  /* Escalonado con separación suficiente para que la tarjeta se despegue del
+     lienzo: con valores demasiado próximos el panel se veía plano. */
+  --fondo:        #0B0F0D;
+  --superficie:   #161C19;
+  --superficie-2: #1F2723;
+  --superficie-3: #2A342E;
+  --borde:        #2C3731;
+  --borde-fuerte: #3E4C44;
+
+  --texto:   #EDF1EC;
+  --texto-2: #A8B3A7;
+  /* Los elementos de navegación usan este tono sobre la barra lateral: con un
+     valor más oscuro la relación de contraste quedaba en 4.24, por debajo del
+     mínimo exigido para texto normal. */
+  --texto-3: var(--n-400);
+
+  /* El verde corporativo es demasiado oscuro para leerse sobre fondo negro:
+     en modo oscuro la marca se expresa con un tono más claro de la misma
+     escala, conservando la identidad y ganando contraste. */
+  --marca:           var(--verde-400);
+  --marca-hover:     var(--verde-300);
+  --marca-suave:     #17291A;
+  --marca-suave-2:   #121F14;
+  --marca-contraste: var(--n-950);
+  --marca-borde:     #2F4A32;
+
+  --peligro:       var(--rojo-oscuro);
+  --peligro-suave: #2E1713;
+  --alerta:        var(--ambar-oscuro);
+  --alerta-suave:  #2C2210;
+  --info:          var(--azul-oscuro);
+  --info-suave:    #12262D;
+  --exito:         var(--verde-400);
+  --exito-suave:   #17291A;
+
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, .5);
+  --sombra-2: 0 1px 3px rgba(0, 0, 0, .55), 0 6px 16px -8px rgba(0, 0, 0, .7);
+  --sombra-3: 0 2px 6px rgba(0, 0, 0, .6), 0 16px 32px -16px rgba(0, 0, 0, .8);
+
+  --anillo: 0 0 0 3px rgba(95, 167, 101, .3);
+
+  /* Los controles que pinta el navegador -- calendario de <input type="date">,
+     barras de desplazamiento, listas desplegables -- se dibujan en claro por
+     omision. Sobre el panel oscuro quedaban ilegibles: el icono del calendario
+     aparecia casi negro sobre fondo negro. Con esto el navegador los rinde en
+     su variante oscura. */
+  color-scheme: dark;
+}
+
+/* ============================================================================
+   COMPATIBILIDAD
+   Las variables antiguas quedan como alias de las nuevas. Así, los componentes
+   que aún las usan adoptan la paleta unificada sin necesidad de reescribirlos.
+   ========================================================================== */
+/* Los alias se repiten en cada ámbito a propósito. Una propiedad
+   personalizada declarada en :root con un var() dentro se resuelve allí
+   mismo, y lo que heredan los descendientes es ya el valor claro; hay que
+   volver a declararla en el ámbito oscuro para que se resuelva de nuevo. */
+:root,
+.admin-shell,
+.tema-oscuro {
+  --bg-global:    var(--fondo);
+  --bg-card:      var(--superficie);
+  --bg-sidebar:   var(--superficie-2);
+  --bg-secondary: var(--superficie-2);
+  --bg-muted:     var(--superficie-3);
+
+  --text-primary: var(--texto);
+  --text-muted:   var(--texto-3);
+
+  --color-primary: var(--marca);
+  --color-accent:  var(--info);
+  --color-warning: var(--alerta);
+  --color-danger:  var(--peligro);
+
+  --border-color: var(--borde);
+  --radius-xl: var(--r-lg);
+  --radius-lg: var(--r-md);
+
+  /* Portal ciudadano */
+  --pc-primary:         var(--marca);
+  --pc-bg-background:   var(--fondo);
+  --pc-bg-card:         var(--superficie);
+  --pc-border:          var(--borde);
+  --pc-text-foreground: var(--texto);
+  --pc-text-muted:      var(--texto-3);
+  --pc-status-danger:   var(--peligro);
+  --pc-status-warning:  var(--alerta);
+  --pc-status-success:  var(--exito);
+}
+
+/* ── Desplegables en modo oscuro ───────────────────────────────────────── */
+/* El navegador pinta las <option> con su propio fondo del sistema, que es
+   claro. Sobre un <select> oscuro la lista desplegada quedaba en blanco. */
+.admin-shell select option,
+.tema-oscuro select option {
+  background-color: var(--superficie-2);
+  color: var(--texto);
+}
+
+/* ── Accesibilidad transversal ─────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--marca);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   AUTOCOMPLETADO DEL NAVEGADOR
+   Chrome impone su propio fondo y color de texto a los campos autocompletados,
+   ignorando la hoja de estilos. Estas reglas los devuelven a la paleta.
+   Vivían duplicadas en dos componentes con valores distintos: la copia del
+   tema oscuro forzaba texto blanco y, al cargarse después, ganaba la cascada
+   y dejaba el correo autocompletado ilegible sobre fondo claro.
+   ========================================================================== */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 40px var(--superficie) inset !important;
+  box-shadow: 0 0 0 40px var(--superficie) inset !important;
+  -webkit-text-fill-color: var(--texto) !important;
+  caret-color: var(--marca);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* En los campos sin relleno (subrayados) el fondo debe seguir siendo el del
+   contenedor, no una caja sólida. */
+.transparent-input:-webkit-autofill,
+.transparent-input:-webkit-autofill:hover,
+.transparent-input:-webkit-autofill:focus,
+.transparent-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 40px var(--fondo) inset !important;
+  box-shadow: 0 0 0 40px var(--fondo) inset !important;
+  -webkit-text-fill-color: var(--texto) !important;
+}

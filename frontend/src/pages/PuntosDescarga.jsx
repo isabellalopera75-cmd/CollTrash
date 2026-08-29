@@ -73,19 +73,19 @@ export default function PuntosDescarga() {
       <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '20px', height: 'calc(100vh - 120px)' }}>
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div>
-            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'white' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--texto)' }}>
               <i className="bi bi-geo-fill" style={{ marginRight: '10px', color: 'var(--color-primary)' }}></i>
               Puntos de Descarga
             </h2>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Rellenos y estaciones de transferencia</p>
           </div>
 
-          <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+          <div style={{ background: 'var(--superficie-2)', padding: '15px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
             <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>Nombre del Lugar</label>
             <input 
               type="text" 
               className="card" 
-              style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', padding: '12px', marginBottom: '15px' }} 
+              style={{ width: '100%', background: 'var(--bg-secondary)', color: 'var(--texto)', padding: '12px', marginBottom: '15px' }} 
               value={nombre}
               onChange={e => setNombre(e.target.value)}
               placeholder="Ej: Relleno Sanitario Los Ángeles"
@@ -94,7 +94,7 @@ export default function PuntosDescarga() {
             <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>Tipo</label>
             <select 
               className="card" 
-              style={{ width: '100%', background: 'var(--bg-secondary)', color: 'white', padding: '12px', marginBottom: '15px' }}
+              style={{ width: '100%', background: 'var(--bg-secondary)', color: 'var(--texto)', padding: '12px', marginBottom: '15px' }}
               value={tipo}
               onChange={e => setTipo(e.target.value)}
             >
@@ -125,7 +125,7 @@ export default function PuntosDescarga() {
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <h4 style={{ fontSize: '14px', marginBottom: '10px', color: 'var(--text-muted)' }}>Puntos Registrados</h4>
             {puntos.map(p => (
-              <div key={p.id} className="card" style={{ padding: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
+              <div key={p.id} className="card" style={{ padding: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--superficie-2)' }}>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 600 }}>{p.nombre}</div>
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{p.tipo}</div>

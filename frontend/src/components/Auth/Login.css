@@ -1,14 +1,14 @@
 /* Login.css */
 
 .login-wrapper {
-  min-height: 100vh;
-  background-color: var(--bg-global);
+  min-height: 100dvh;
+  background-color: var(--fondo);
   position: relative;
   overflow: hidden;
-  color: #f0f0e8;
+  color: var(--texto);
   display: flex;
   flex-direction: column;
-  font-family: 'Inter', 'Geist', sans-serif;
+  font-family: var(--f-texto);
 }
 
 .login-bg-text {
@@ -29,7 +29,7 @@
   font-size: 32vw;
   font-weight: 900;
   color: transparent;
-  -webkit-text-stroke: 2px rgba(255, 255, 255, 0.05);
+  -webkit-text-stroke: 2px var(--superficie-3);
   letter-spacing: -0.05em;
 }
 
@@ -50,7 +50,7 @@
   align-items: center;
   gap: 12px;
   font-size: 11px;
-  color: #777;
+  color: var(--texto-3);
   font-weight: 600;
   letter-spacing: 1px;
 }
@@ -64,7 +64,10 @@
 .login-tab-btn {
   background: none;
   border: none;
-  padding: 0 0 8px 0;
+  padding: 12px 0 8px;
+  /* Superficie táctil suficiente: estas pestañas son el primer control que
+     toca el conductor desde el teléfono. */
+  min-height: 44px;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -89,7 +92,7 @@
 
   .login-bg-line {
     font-size: 40vw; /* Make background text slightly larger proportionally on vertical screens */
-    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.05);
+    -webkit-text-stroke: 1px var(--superficie-3);
   }
 
   .login-tabs-container {
@@ -98,12 +101,20 @@
   }
 
   .login-tab-btn {
-    font-size: 10px;
-    letter-spacing: 1px;
-    padding: 0 0 4px 0;
+    font-size: 12px;
+    letter-spacing: .08em;
+    padding: 12px 0 6px;
   }
 
   .login-form-container {
     padding: 24px;
   }
+}
+
+/* El enlace de recuperación es un control: necesita área táctil propia. */
+.login-form-container [style*="Olvidaste"],
+.login-olvidaste {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }

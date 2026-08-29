@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import API, { registrarConductor, editarConductor } from '../services/api';
+import API, { registrarConductor, editarConductor, eliminarConductor } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
 
 export default function Conductores() {
@@ -33,6 +33,18 @@ export default function Conductores() {
     setMostrarModal(true);
   };
 
+  const handleEliminar = async (id, nombre) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar al conductor "${nombre}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+    try {
+      await eliminarConductor(id);
+      cargarConductores();
+    } catch (error) {
+      alert('❌ Error: ' + (error.response?.data?.mensaje || 'No se pudo eliminar el conductor. Es posible que tenga registros asociados.'));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -44,7 +56,10 @@ export default function Conductores() {
       if (editandoId) {
         await editarConductor(editandoId, form);
       } else {
-        await registrarConductor(form);
+        const res = await registrarConductor(form);
+        if (res.data?.mensaje) {
+          alert('✅ ' + res.data.mensaje);
+        }
       }
       setMostrarModal(false);
       cargarConductores();
@@ -57,7 +72,7 @@ export default function Conductores() {
     <AdminLayout>
       <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>
+           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--texto)' }}>
              <i className="bi bi-people-fill" style={{ marginRight: '12px', color: 'var(--color-primary)' }}></i>
              Gestión de Conductores
            </h2>
@@ -88,12 +103,12 @@ export default function Conductores() {
                     <i className="bi bi-person-fill"></i>
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, color: 'white' }}>{c.nombre}</div>
+                    <div style={{ fontWeight: 600, color: 'var(--texto)' }}>{c.nombre}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CC: {c.cedula || 'N/A'}</div>
                   </div>
                </div>
                <div>
-                  <div style={{ fontSize: '13px', color: 'white' }}>{c.email}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--texto)' }}>{c.email}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.telefono || 'Sin teléfono'}</div>
                </div>
                <div>
@@ -105,8 +120,8 @@ export default function Conductores() {
                   <button onClick={() => handleAbrirModal(c)} className="icon-btn" title="Editar">
                     <i className="bi bi-pencil-square"></i>
                   </button>
-                  <button className="icon-btn" title="Cambiar Estado">
-                    <i className="bi bi-arrow-repeat"></i>
+                  <button onClick={() => handleEliminar(c.id, c.nombre)} className="icon-btn" title="Eliminar" style={{ color: 'var(--color-danger)' }}>
+                    <i className="bi bi-trash"></i>
                   </button>
                </div>
             </div>
@@ -119,11 +134,11 @@ export default function Conductores() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="card" style={{ width: '520px', border: '1px solid var(--color-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '18px', color: 'white' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--texto)' }}>
                 <i className={`bi ${editandoId ? 'bi-pencil' : 'bi-person-plus'}`} style={{ marginRight: '10px', color: 'var(--color-primary)' }}></i>
                 {editandoId ? 'Editar Conductor' : 'Nuevo Conductor'}
               </h3>
-              <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '18px' }}>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', color: 'var(--texto)', cursor: 'pointer', fontSize: '18px' }}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -135,14 +150,14 @@ export default function Conductores() {
                   required 
                   value={form.nombre} 
                   className="card" 
-                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px' }} 
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px' }} 
                   onChange={e => setForm({...form, nombre: e.target.value.replace(/[0-9]/g, '')})} 
                   placeholder="Ej. Juan Pérez" 
                 />
               </div>
               <div style={{ gridColumn: '1/-1' }}>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Correo Electrónico</label>
-                <input type="email" required value={form.email} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px' }} onChange={e => setForm({...form, email: e.target.value})} placeholder="conductor@colltrash.com" />
+                <input type="email" required value={form.email} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px' }} onChange={e => setForm({...form, email: e.target.value})} placeholder="conductor@colltrash.com" />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Cédula</label>
@@ -151,7 +166,7 @@ export default function Conductores() {
                   required
                   value={form.cedula} 
                   className="card" 
-                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px' }} 
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px' }} 
                   onChange={e => setForm({...form, cedula: e.target.value.replace(/[^0-9]/g, '')})} 
                   placeholder="1234567890" 
                 />
@@ -163,7 +178,7 @@ export default function Conductores() {
                   required
                   value={form.telefono} 
                   className="card" 
-                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px' }} 
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px' }} 
                   onChange={e => {
                     const val = e.target.value.replace(/[^0-9]/g, '');
                     if (val.length <= 10) setForm({...form, telefono: val});
@@ -178,7 +193,7 @@ export default function Conductores() {
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                   Contraseña {editandoId && <span style={{ color: 'var(--color-warning)', fontStyle: 'italic' }}>(dejar vacío para no cambiar)</span>}
                 </label>
-                <input type="password" required={!editandoId} value={form.password} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'white', padding: '12px' }} onChange={e => setForm({...form, password: e.target.value})} placeholder="••••••••" />
+                <input type="password" required={!editandoId} value={form.password} className="card" style={{ width: '100%', background: 'var(--bg-secondary)', border: 'none', color: 'var(--texto)', padding: '12px' }} onChange={e => setForm({...form, password: e.target.value})} placeholder="••••••••" />
               </div>
               <button type="submit" className="btn btn-primary" style={{ gridColumn: '1/-1', padding: '14px', fontWeight: 700, marginTop: '8px' }}>
                 {editandoId ? 'Guardar Cambios' : 'Registrar Conductor'}

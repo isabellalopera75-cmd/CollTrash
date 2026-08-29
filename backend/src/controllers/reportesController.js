@@ -1,9 +1,24 @@
 const pool = require('../config/database');
 const { crearNotificacion } = require('../services/notificacionService');
-const { getIo } = require('../config/socket');
+const { emitirAdmins, emitirUsuario } = require('../config/socket');
+
+/**
+ * Difunde el cambio de estado de un reporte.
+ * Va al panel del administrador y, ademas, al ciudadano que lo creo, para que
+ * vea la actualizacion en su portal sin recargar (RF-08.6). Antes se emitia con
+ * io.emit a todos los sockets conectados, incluidos conductores ajenos.
+ */
+const emitirReporteActualizado = (reporte) => {
+  if (!reporte) return;
+  emitirAdmins('reporte_actualizado', reporte);
+  if (reporte.ciudadano_id) {
+    emitirUsuario(reporte.ciudadano_id, 'reporte_actualizado', reporte);
+  }
+};
+
 const fs = require('fs');
 const path = require('path');
-const { getFechaColombia } = require('../utils/dateUtils');
+const { getFechaColombia, aFechaISO, formatearFechaLarga } = require('../utils/dateUtils');
 const heicConvert = require('heic-convert');
 require('dotenv').config();
 
@@ -11,7 +26,8 @@ const notificarConductorReporteAsignado = async (asignacionId, reporte) => {
   if (!asignacionId || !reporte) return;
 
   const asignacionRes = await pool.query(
-    `SELECT rf.conductor_default_id AS conductor_id, rf.nombre AS ruta_nombre, a.fecha
+    `SELECT COALESCE(a.conductor_id, rf.conductor_default_id) AS conductor_id,
+            rf.nombre AS ruta_nombre, a.fecha
      FROM asignaciones_semanales a
      JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
      WHERE a.id = $1`,
@@ -39,7 +55,12 @@ const notificarConductorReporteAsignado = async (asignacionId, reporte) => {
 const crearReporte = async (req, res) => {
   const { latitud, longitud, descripcion, tipo_problema, nombre_ciudadano, barrio_id, descripcion_extra } = req.body;
   
-  const ciudadanoId = req.usuario ? req.usuario.id : null;
+  // La ruta exige token (reportesRoutes), de modo que siempre hay un autor: para
+  // reportar hay que estar registrado y con la sesion iniciada. La rama que
+  // contemplaba un autor anonimo era codigo muerto y hacia creer que el reporte
+  // sin cuenta estaba soportado. nombre_ciudadano se sigue pidiendo porque es lo
+  // que se muestra al administrador y al conductor.
+  const ciudadanoId = req.usuario.id;
   
   let foto_url = req.file ? `/uploads/reportes/${req.file.filename}` : null;
 
@@ -82,7 +103,7 @@ const crearReporte = async (req, res) => {
 
     // NOTIFICAR ADMIN: Nuevo reporte ciudadano
     await crearNotificacion({
-      titulo: '👥 Reporte Ciudadano',
+      titulo: 'Reporte ciudadano',
       mensaje: `Nuevo reporte de ${nombre_ciudadano} por ${tipo_problema}.`,
       tipo: 'comunidad',
       metadata: { reporte_id: resultado.rows[0].id, tipo: 'REPORTE_CIUDADANO' }
@@ -110,7 +131,7 @@ const obtenerReportes = async (req, res) => {
     const resultado = await pool.query(
       `SELECT r.*, COALESCE(c.nombre, r.nombre_ciudadano) AS ciudadano_nombre, c.email AS ciudadano_email
        FROM reportes_ciudadanos r
-       LEFT JOIN ciudadanos c ON c.id = r.ciudadano_id
+       LEFT JOIN usuarios c ON c.id = r.ciudadano_id
        ORDER BY r.created_at DESC
        LIMIT $1 OFFSET $2`,
       [limite, offset]
@@ -131,87 +152,7 @@ const obtenerReportes = async (req, res) => {
   }
 };
 
-const atenderReporte = async (req, res) => {
-  const { id } = req.params;
-  const { asignacion_id } = req.body;
 
-  try {
-    if (!asignacion_id) {
-      return res.status(400).json({ mensaje: 'Debe seleccionar una asignacion para atender el reporte.' });
-    }
-
-    const asignacionValida = await pool.query(
-      `SELECT estado, fecha
-       FROM asignaciones_semanales
-       WHERE id = $1`,
-      [asignacion_id]
-    );
-
-    if (asignacionValida.rows.length === 0) {
-      return res.status(400).json({ mensaje: 'La asignacion seleccionada no existe.' });
-    }
-
-    const destino = asignacionValida.rows[0];
-    if (!['pendiente', 'activa'].includes(destino.estado)) {
-      return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta cerrada.' });
-    }
-
-    if (new Date(destino.fecha) < new Date(getFechaColombia())) {
-      return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta pasada.' });
-    }
-
-    const reporte = await pool.query(
-      `UPDATE reportes_ciudadanos SET estado = 'en_proceso', asignacion_id = $1, atendido_at = NOW()
-       WHERE id = $2 RETURNING *`,
-      [asignacion_id, id]
-    );
-
-    if (reporte.rows.length === 0) {
-      return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
-    }
-
-    // Emitir por Socket.io en tiempo real
-    const io = getIo();
-    if (io) {
-      io.emit('reporte_actualizado', reporte.rows[0]);
-    }
-
-    await notificarConductorReporteAsignado(asignacion_id, reporte.rows[0])
-      .catch(notiErr => console.error('Error al notificar conductor:', notiErr.message));
-
-    res.status(200).json({ mensaje: 'Reporte atendido correctamente.' });
-  } catch (error) {
-    console.error('Error al atender:', error.message);
-    res.status(500).json({ mensaje: 'Error interno del servidor.' });
-  }
-};
-
-const rechazarReporte = async (req, res) => {
-  const { id } = req.params;
-  const { justificacion } = req.body;
-
-  try {
-    const resultado = await pool.query(
-      `UPDATE reportes_ciudadanos SET estado = 'rechazado', justificacion_rechazo = $1 WHERE id = $2 RETURNING *`,
-      [justificacion, id]
-    );
-
-    if (resultado.rows.length === 0) {
-      return res.status(404).json({ mensaje: 'Reporte no encontrado.' });
-    }
-
-    // Emitir por Socket.io en tiempo real
-    const io = getIo();
-    if (io) {
-      io.emit('reporte_actualizado', resultado.rows[0]);
-    }
-
-    res.status(200).json({ mensaje: 'Reporte rechazado.', reporte: resultado.rows[0] });
-  } catch (error) {
-    console.error('Error al rechazar reporte:', error.message);
-    res.status(500).json({ mensaje: 'Error interno del servidor.' });
-  }
-};
 
 const actualizarEstado = async (req, res) => {
   const { id } = req.params;
@@ -248,10 +189,20 @@ const actualizarEstado = async (req, res) => {
             if (asignacionRes.rows.length > 0) {
               finalAsignacionId = asignacionRes.rows[0].id;
             } else {
-              // Si no existe, la creamos dinámicamente para ese día
+              // Si no existe, la creamos dinámicamente para ese día.
+              //
+              // La tripulación se copia de la ruta fija en el propio INSERT.
+              // Antes se omitía, y ésta era la única vía del sistema que dejaba
+              // asignaciones con conductor y vehículo en nulo: por eso el resto
+              // de consultas necesitaba un COALESCE contra rutas_fijas, y de ahí
+              // salía la tentación de unir directamente contra la ruta fija, que
+              // atribuye la jornada al titular y no a quien la condujo.
               const insertRes = await client.query(
-                `INSERT INTO asignaciones_semanales (ruta_fija_id, fecha, estado)
-                 VALUES ($1, $2, 'pendiente') RETURNING id`,
+                `INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
+                 SELECT rf.id, rf.conductor_default_id, rf.vehiculo_id, $2, 'pendiente'
+                   FROM rutas_fijas rf
+                  WHERE rf.id = $1
+                 RETURNING id`,
                 [rutaFijaId, targetFecha]
               );
               finalAsignacionId = insertRes.rows[0].id;
@@ -308,13 +259,31 @@ const actualizarEstado = async (req, res) => {
           return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta cerrada.' });
         }
 
-        if (new Date(destino.fecha) < new Date(getFechaColombia())) {
+        // Comparacion de cadenas 'YYYY-MM-DD': new Date('2026-08-19') se
+        // interpreta como medianoche UTC y el `date` de la asignacion como
+        // medianoche local, de modo que la comparacion dependia de la zona del
+        // servidor y podia aceptar una ruta de ayer o rechazar la de hoy.
+        if (aFechaISO(destino.fecha) < getFechaColombia()) {
           await client.query('ROLLBACK');
           return res.status(400).json({ mensaje: 'No se puede asignar un reporte a una ruta pasada.' });
         }
       }
 
-      const msjAceptado = `Programado para recolección en la ruta: ${targetRutaNombre || 'asignada'} (${targetFecha || fecha_programada || 'Próximas 48h'})`;
+      // targetFecha es un `date` de PostgreSQL, es decir un objeto Date. Al
+      // interpolarlo en la plantilla se convertía con toString() y el ciudadano
+      // terminaba leyendo 'Thu Aug 27 2026 00:00:00 GMT-0500 (hora estándar de
+      // Colombia)'. Aquí se escribe la fecha en español y sin hora, que es lo
+      // único que necesita saber: el día que pasa el carro.
+      //
+      // El texto no repite "programado para recolección": ya lo dice el
+      // encabezado bajo el que se muestra, tanto en la ficha del administrador
+      // ("Detalle de agenda:") como en la tarjeta del ciudadano
+      // ("Programado para recolección:"). Aquí van sólo la ruta y el día.
+      const fechaLegible = formatearFechaLarga(targetFecha || fecha_programada);
+      const ruta = targetRutaNombre || 'Ruta asignada';
+      const msjAceptado = fechaLegible
+        ? `${ruta} · ${fechaLegible}`
+        : `${ruta} · dentro de las próximas 48 horas`;
       
       resultado = await client.query(
         `UPDATE reportes_ciudadanos 
@@ -344,10 +313,7 @@ const actualizarEstado = async (req, res) => {
     await client.query('COMMIT');
 
     // Emitir por Socket.io en tiempo real
-    const io = getIo();
-    if (io) {
-      io.emit('reporte_actualizado', resultado.rows[0]);
-    }
+    emitirReporteActualizado(resultado.rows[0]);
 
     if ((estado === 'en_proceso' || estado === 'atendido' || estado === 'resuelto') && finalAsignacionId) {
       await notificarConductorReporteAsignado(finalAsignacionId, resultado.rows[0])
@@ -378,4 +344,4 @@ const obtenerMisReportes = async (req, res) => {
   }
 };
 
-module.exports = { crearReporte, obtenerReportes, atenderReporte, rechazarReporte, obtenerMisReportes, actualizarEstado };
+module.exports = { crearReporte, obtenerReportes, obtenerMisReportes, actualizarEstado };

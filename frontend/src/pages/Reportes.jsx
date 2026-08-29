@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { formatearDiaLargo, formatearInstanteCorto } from '../utils/dateUtils';
 import { obtenerReportes, actualizarEstadoReporte, obtenerAsignaciones, getAssetUrl } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -6,6 +8,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 export default function Reportes() {
+  const location = useLocation();
   const [reportes, setReportes] = useState([]);
   const [reporteSeleccionado, setReporteSeleccionado] = useState(null);
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -19,6 +22,19 @@ export default function Reportes() {
 
   useEffect(() => { cargarReportes(); }, []);
 
+  // Apertura directa desde una notificacion: /reportes?reporte_id=N abre la
+  // ficha de ese reporte -- foto, mapa, texto del ciudadano y botones de
+  // gestion -- en lugar de dejar al administrador buscandolo en la lista.
+  useEffect(() => {
+    const idBuscado = new URLSearchParams(location.search).get('reporte_id');
+    if (!idBuscado || reportes.length === 0) return;
+    if (String(reporteSeleccionado?.id) === String(idBuscado)) return;
+
+    const reporte = reportes.find(r => String(r.id) === String(idBuscado));
+    if (reporte) handleVerDetalle(reporte);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, reportes]);
+
   const fechaColombia = (dias = 0) => {
     const ahora = new Date();
     const colombia = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
@@ -31,7 +47,7 @@ export default function Reportes() {
 
   const cargarReportes = async () => {
     try {
-      const res = await obtenerReportes();
+      const res = await obtenerReportes(200);
       setReportes(res.data.reportes || []);
     } catch (e) { console.error(e); }
     finally { setCargando(false); }
@@ -73,7 +89,7 @@ export default function Reportes() {
         {/* Lado Izquierdo: Lista de Reportes */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', minHeight: 0 }}>
           <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)' }}>
-            <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'white' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--texto)' }}>
               <i className="bi bi-megaphone-fill" style={{ marginRight: '12px', color: 'var(--color-primary)' }}></i>
               Reportes Ciudadanos
             </h2>
@@ -105,13 +121,13 @@ export default function Reportes() {
                     marginBottom: '10px', 
                     cursor: 'pointer', 
                     border: reporteSeleccionado?.id === r.id ? '1px solid var(--color-primary)' : '1px solid transparent',
-                    background: 'rgba(255,255,255,0.02)'
+                    background: 'var(--superficie-2)'
                   }}
                   onClick={() => handleVerDetalle(r)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>
-                      <i className="bi bi-hash"></i>{r.id} • {new Date(r.created_at).toLocaleDateString()}
+                      <i className="bi bi-hash"></i>{r.id} • {formatearInstanteCorto(r.created_at)}
                     </span>
                     <span className={`status-badge ${stClass}`} style={{ fontSize: '9px' }}>{stLabel}</span>
                   </div>
@@ -135,7 +151,7 @@ export default function Reportes() {
             return (
               <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {/* Mapa con altura fija */}
-                <div style={{ height: '250px', minHeight: '250px', background: '#000', flexShrink: 0 }}>
+                <div style={{ height: '250px', minHeight: '250px', background: 'var(--fondo)', flexShrink: 0 }}>
                   <MapContainer center={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]} zoom={16} style={{ height: '100%' }}>
                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
                     <Marker position={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]}>
@@ -151,22 +167,22 @@ export default function Reportes() {
                       <img 
                         src={getAssetUrl(reporteSeleccionado.foto_url)} 
                         alt="Evidencia" 
-                        style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}
+                        style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--borde)', flexShrink: 0 }}
                       />
                     )}
                     <div style={{ minWidth: 0 }}>
-                      <h4 style={{ fontSize: '16px', color: 'white', marginBottom: '4px' }}>{reporteSeleccionado.tipo_problema}</h4>
+                      <h4 style={{ fontSize: '16px', color: 'var(--texto)', marginBottom: '4px' }}>{reporteSeleccionado.tipo_problema}</h4>
                       <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{reporteSeleccionado.descripcion}</p>
                       <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '8px' }}>Reportado por: {reporteSeleccionado.nombre_ciudadano}</div>
                     </div>
                   </div>
 
                   {reporteSeleccionado.justificacion_rechazo && (
-                    <div style={{ padding: '12px', background: reporteSeleccionado.estado === 'rechazado' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0, 255, 157, 0.1)', border: reporteSeleccionado.estado === 'rechazado' ? '1px solid #EF4444' : '1px solid #00FF9D', borderRadius: '8px', fontSize: '13px' }}>
-                      <strong style={{ color: reporteSeleccionado.estado === 'rechazado' ? '#EF4444' : '#00FF9D' }}>
+                    <div style={{ padding: '12px', background: reporteSeleccionado.estado === 'rechazado' ? 'var(--peligro-suave)' : 'var(--marca-suave)', border: reporteSeleccionado.estado === 'rechazado' ? '1px solid var(--peligro)' : '1px solid var(--marca)', borderRadius: '8px', fontSize: '13px' }}>
+                      <strong style={{ color: reporteSeleccionado.estado === 'rechazado' ? 'var(--peligro)' : 'var(--marca)' }}>
                         {reporteSeleccionado.estado === 'rechazado' ? 'Motivo de rechazo: ' : 'Detalle de agenda: '}
                       </strong>
-                      <span style={{ color: '#fff' }}>{reporteSeleccionado.justificacion_rechazo}</span>
+                      <span style={{ color: 'var(--texto)' }}>{reporteSeleccionado.justificacion_rechazo}</span>
                     </div>
                   )}
                 </div>
@@ -174,13 +190,13 @@ export default function Reportes() {
                 {/* Botones siempre fijos al fondo */}
                 <div style={{ padding: '15px 20px', borderTop: '1px solid var(--border-color)', flexShrink: 0 }}>
                   {expirado && !yaProcesado ? (
-                    <div style={{ padding: '14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #EF4444', borderRadius: '8px', textAlign: 'center', color: '#EF4444', fontSize: '13px', fontWeight: 600 }}>
+                    <div style={{ padding: '14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--peligro)', borderRadius: '8px', textAlign: 'center', color: 'var(--peligro)', fontSize: '13px', fontWeight: 600 }}>
                       ⚠️ Este reporte ha expirado al superar el límite de 42 horas sin ser atendido.
                     </div>
                   ) : !yaProcesado ? (
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <button onClick={() => { setAccion('aceptar'); setMostrarModal(true); }} className="btn btn-primary" style={{ flex: 1 }}>✅ Aceptar y Agendar</button>
-                      <button onClick={() => { setAccion('rechazar'); setMostrarModal(true); }} className="btn" style={{ flex: 1, background: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', border: '1px solid #ff4444' }}>❌ Rechazar</button>
+                      <button onClick={() => { setAccion('rechazar'); setMostrarModal(true); }} className="btn" style={{ flex: 1, background: 'var(--peligro-suave)', color: 'var(--peligro)', border: '1px solid var(--peligro)' }}>❌ Rechazar</button>
                     </div>
                   ) : (
                     <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
@@ -211,14 +227,14 @@ export default function Reportes() {
               {accion === 'aceptar' ? (
                 <div>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Asignar a Ruta y Fecha</label>
-                  <select className="card" style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white' }} value={asignacionId} onChange={e => setAsignacionId(e.target.value)}>
+                  <select className="card" style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'var(--texto)' }} value={asignacionId} onChange={e => setAsignacionId(e.target.value)}>
                     <option value="">Selecciona asignación programada...</option>
                     {asignacionesDisponibles.length === 0 && (
                       <option disabled>No hay rutas programadas para mañana ni pasado</option>
                     )}
                     {asignacionesDisponibles.map(a => (
                       <option key={a.id} value={a.id}>
-                        {a.ruta_nombre} — {new Date(a.fecha).toLocaleDateString()}
+                        {a.ruta_nombre} — {formatearDiaLargo(a.fecha, { conAnio: false })}
                       </option>
                     ))}
                   </select>
@@ -228,7 +244,7 @@ export default function Reportes() {
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Motivo del Rechazo (Visible para el ciudadano)</label>
                   <textarea 
                     className="card" 
-                    style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'white', minHeight: '100px' }}
+                    style={{ width: '100%', padding: '12px', marginTop: '8px', background: 'var(--bg-secondary)', color: 'var(--texto)', minHeight: '100px' }}
                     placeholder="Explica de forma clara el motivo por el cual no se realizará la recolección..."
                     value={justificacion}
                     onChange={e => setJustificacion(e.target.value)}

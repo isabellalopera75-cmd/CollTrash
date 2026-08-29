@@ -1,5 +1,7 @@
 const pool = require('../config/database');
-const { getFechaColombia } = require('../utils/dateUtils');
+const {
+  getFechaColombia, getMinutosDelDiaColombia, horaAMinutos, aFechaISO
+} = require('../utils/dateUtils');
 
 const obtenerAsignacionesPorFecha = async (req, res) => {
   const { fecha } = req.query; // Espera YYYY-MM-DD
@@ -39,8 +41,9 @@ const obtenerAsignacionesPorFecha = async (req, res) => {
 
     const conteosMap = {};
     conteos.rows.forEach(r => {
-      const f = new Date(r.fecha).toISOString().split('T')[0];
-      conteosMap[f] = parseInt(r.cantidad);
+      // aFechaISO y no toISOString: el segundo pasa por UTC y adelanta o atrasa
+      // un dia el conteo del calendario segun la hora del servidor.
+      conteosMap[aFechaISO(r.fecha)] = parseInt(r.cantidad);
     });
 
     res.json({ 
@@ -59,7 +62,9 @@ const reasignarAsignacion = async (req, res) => {
 
   try {
     const asigActual = await pool.query(
-      `SELECT asig.fecha, asig.estado, asig.ruta_fija_id, rf.jornada_id, rf.conductor_default_id, rf.vehiculo_id,
+      `SELECT asig.fecha, asig.estado, asig.ruta_fija_id,
+              COALESCE(asig.conductor_id, rf.conductor_default_id) AS conductor_actual_id,
+              rf.jornada_id,
               j.hora_limite_fin
        FROM asignaciones_semanales asig
        JOIN rutas_fijas rf ON rf.id = asig.ruta_fija_id
@@ -72,45 +77,59 @@ const reasignarAsignacion = async (req, res) => {
       return res.status(404).json({ mensaje: 'Asignación no encontrada' });
     }
 
-    const { fecha, jornada_id, estado, ruta_fija_id, conductor_default_id, hora_limite_fin } = asigActual.rows[0];
+    const { fecha, jornada_id, estado, ruta_fija_id, conductor_actual_id, hora_limite_fin } = asigActual.rows[0];
 
     if (estado !== 'pendiente') {
       return res.status(400).json({ mensaje: 'Solo se pueden reasignar rutas pendientes.' });
     }
 
-    // REGLA: Bloquear reasignación si la jornada ya terminó
+    // REGLA: Bloquear reasignación si la jornada ya terminó.
+    //
+    // La comparacion se hace en minutos desde medianoche en hora de Colombia,
+    // igual que en iniciarRuta. Antes se construia un Date con la hora local
+    // del servidor: en un servidor en UTC la jornada de la tarde se daba por
+    // terminada cinco horas antes de tiempo y el administrador no podia
+    // reasignar rutas que aun estaban por delante.
     const hoy = getFechaColombia();
-    const fechaAsig = new Date(fecha).toISOString().split('T')[0];
+    const fechaAsig = aFechaISO(fecha);
     if (fechaAsig === hoy && hora_limite_fin) {
-      const [hf, mf] = hora_limite_fin.split(':');
-      const ahora = new Date();
-      const fin = new Date();
-      fin.setHours(parseInt(hf), parseInt(mf), 0);
-      if (ahora > fin) {
+      const finMin = horaAMinutos(hora_limite_fin);
+      if (finMin !== null && getMinutosDelDiaColombia() > finMin) {
         return res.status(400).json({ mensaje: '❌ La jornada ya finalizó. No se puede reasignar esta ruta.' });
       }
     }
 
-    // REGLA: Evitar reasignaciones múltiples para la misma asignación/fecha
+    // REGLA: una sola reasignación manual por asignación.
+    //
+    // Se filtra por asignacion_id y por origen (migración 014). Antes bastaba
+    // con que existiera cualquier fila de esa ruta y esa fecha, y en esa tabla
+    // también se anotan los relevos por incidencia: un accidente consumía el
+    // cupo del día y dejaba al administrador sin poder reasignar la ruta si el
+    // conductor de reemplazo tampoco podía cubrirla.
     const yaReasignada = await pool.query(
-      `SELECT id FROM cambios_conductor 
-       WHERE ruta_fija_id = $1 AND fecha_inicio = $2`,
-      [ruta_fija_id, fecha]
+      `SELECT id FROM cambios_conductor
+       WHERE asignacion_id = $1 AND origen = 'reasignacion'`,
+      [id]
     );
 
     if (yaReasignada.rows.length > 0) {
       return res.status(400).json({ mensaje: '⚠️ Esta ruta ya fue reasignada para esta fecha. No se puede reasignar nuevamente.' });
     }
 
-    // Verificar conflictos con otras asignaciones del mismo día/jornada
+    // Verificar conflictos con otras asignaciones del mismo día/jornada.
+    // Se compara contra la tripulación efectiva de cada asignación, no contra la
+    // configuración base de la ruta: de lo contrario una ruta ya reasignada ese
+    // día quedaba invisible y se podía asignar el mismo conductor dos veces.
     const conflictos = await pool.query(
-      `SELECT rf.nombre 
+      `SELECT rf.nombre
        FROM asignaciones_semanales a
        JOIN rutas_fijas rf ON rf.id = a.ruta_fija_id
-       WHERE a.fecha = $1 
-         AND rf.jornada_id = $2 
+       WHERE a.fecha = $1
+         AND rf.jornada_id = $2
          AND a.id != $3
-         AND (rf.conductor_default_id = $4 OR rf.vehiculo_id = $5)`,
+         AND a.estado IN ('pendiente', 'activa')
+         AND (COALESCE(a.conductor_id, rf.conductor_default_id) = $4
+              OR COALESCE(a.vehiculo_id, rf.vehiculo_id) = $5)`,
       [fecha, jornada_id, id, conductor_id, vehiculo_id]
     );
 
@@ -121,8 +140,10 @@ const reasignarAsignacion = async (req, res) => {
     }
 
     const motivoCambio = req.body.motivo || 'Reasignación diaria manual';
-    const conductorOriginal = conductor_default_id || null;
-    const vehiculoOriginal = asigActual.rows[0].vehiculo_id || null;
+    // Quien tenía la asignación ahora mismo, no el titular de la ruta fija: tras
+    // un relevo por incidencia ya no son la misma persona y el histórico
+    // quedaba anotando como sustituido a un conductor que no iba conduciendo.
+    const conductorOriginal = conductor_actual_id || null;
 
     // Usar transacción para garantizar atomicidad
     const client = await pool.connect();
@@ -131,22 +152,30 @@ const reasignarAsignacion = async (req, res) => {
 
       // Registrar el cambio (guardar conductor/vehículo original para auditoría y posible reversión)
       await client.query(
-        `INSERT INTO cambios_conductor 
-         (ruta_fija_id, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, es_permanente)
-         VALUES ($1, $2, $3, $4, $5, $5, $6)`,
-        [ruta_fija_id, conductorOriginal, conductor_id, motivoCambio, fecha, !!es_permanente]
+        `INSERT INTO cambios_conductor
+         (ruta_fija_id, asignacion_id, origen, conductor_original_id, conductor_reemplazante_id, motivo, fecha_inicio, fecha_fin, es_permanente)
+         VALUES ($1, $2, 'reasignacion', $3, $4, $5, $6, $6, $7)`,
+        [ruta_fija_id, id, conductorOriginal, conductor_id, motivoCambio, fecha, !!es_permanente]
       );
 
-      // SIEMPRE actualizar rutas_fijas para que el nuevo conductor vea la ruta en su dashboard
-      await client.query(
-        `UPDATE rutas_fijas SET conductor_default_id = $1, vehiculo_id = $2 WHERE id = $3`,
-        [conductor_id, vehiculo_id, ruta_fija_id]
-      );
+      // RF-03.5: el relevo se aplica sobre la asignación del día. La
+      // configuración base de la ruta fija sólo se toca cuando el cambio se
+      // declara permanente. Antes se sobrescribía rutas_fijas en todos los
+      // casos, así que un reemplazo puntual se volvía definitivo: el conductor
+      // titular perdía su ruta y el cron generaba todas las fechas futuras a
+      // nombre del suplente.
+      if (es_permanente) {
+        await client.query(
+          `UPDATE rutas_fijas SET conductor_default_id = $1, vehiculo_id = $2 WHERE id = $3`,
+          [conductor_id, vehiculo_id, ruta_fija_id]
+        );
+      }
 
-      // ACTUALIZAR asignaciones_semanales del día para que el nuevo conductor sea el dueño de la asignación
+      // La asignación del día pasa al nuevo conductor y vehículo. El panel del
+      // conductor y el monitoreo leen de aquí, no de la ruta fija (RNF-12).
       await client.query(
-        `UPDATE asignaciones_semanales SET conductor_id = $1 WHERE id = $2`,
-        [conductor_id, id]
+        `UPDATE asignaciones_semanales SET conductor_id = $1, vehiculo_id = $2 WHERE id = $3`,
+        [conductor_id, vehiculo_id, id]
       );
 
       await client.query('COMMIT');

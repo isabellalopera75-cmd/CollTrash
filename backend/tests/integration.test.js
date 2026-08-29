@@ -75,11 +75,15 @@ describe('Database Triggers Integration', () => {
     // This acts as an integration test for the trg_copy_sectores trigger
     
     // 1. Insert a new asignacion (this should fire the database trigger)
+    //
+    // Since migration 016 the crew is mandatory: an asignacion always states who
+    // drives it and with which vehicle, so no query has to fall back to the
+    // route template to find out.
     const asignacionRes = await pool.query(`
-      INSERT INTO asignaciones_semanales (ruta_fija_id, fecha, estado)
-      VALUES ($1, CURRENT_DATE, 'pendiente')
+      INSERT INTO asignaciones_semanales (ruta_fija_id, conductor_id, vehiculo_id, fecha, estado)
+      VALUES ($1, $2, $3, CURRENT_DATE, 'pendiente')
       RETURNING id
-    `, [testRutaId]);
+    `, [testRutaId, testConductorId, testVehiculoId]);
     
     testAsignacionId = asignacionRes.rows[0].id;
 

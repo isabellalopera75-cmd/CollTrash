@@ -115,7 +115,7 @@ export default function Configuracion() {
     <AdminLayout>
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>
+           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--texto)' }}>
              <i className="bi bi-gear-fill" style={{ marginRight: '12px', color: 'var(--color-primary)' }}></i>
              Configuración de Sistema
            </h2>
@@ -123,20 +123,20 @@ export default function Configuracion() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', borderBottom: '1px solid #222' }}>
-        <button onClick={() => setTab('general')} style={{ padding: '12px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'general' ? 'var(--color-primary)' : 'transparent'}`, color: tab === 'general' ? 'white' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}>General</button>
-        <button onClick={() => setTab('jornadas')} style={{ padding: '12px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'jornadas' ? 'var(--color-primary)' : 'transparent'}`, color: tab === 'jornadas' ? 'white' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}>Turnos / Jornadas</button>
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', borderBottom: '1px solid var(--superficie-2)' }}>
+        <button onClick={() => setTab('general')} style={{ padding: '12px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'general' ? 'var(--color-primary)' : 'transparent'}`, color: tab === 'general' ? 'var(--texto)' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}>General</button>
+        <button onClick={() => setTab('jornadas')} style={{ padding: '12px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'jornadas' ? 'var(--color-primary)' : 'transparent'}`, color: tab === 'jornadas' ? 'var(--texto)' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}>Turnos / Jornadas</button>
       </div>
 
       {tab === 'general' && (
         <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '24px', height: 'calc(100vh - 250px)' }}>
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
-              <h3 style={{ fontSize: '18px', color: 'white', marginBottom: '8px' }}>Centro de Operaciones</h3>
+              <h3 style={{ fontSize: '18px', color: 'var(--texto)', marginBottom: '8px' }}>Centro de Operaciones</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Establece el punto de partida (parqueadero/depósito) de todos los camiones.</p>
             </div>
             
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: '1px solid #333' }}>
+            <div style={{ background: 'var(--superficie-2)', padding: '15px', borderRadius: '12px', border: '1px solid var(--borde)' }}>
               <div style={{ fontSize: '11px', color: config.depot ? 'var(--color-primary)' : 'var(--text-muted)', marginBottom: '15px' }}>
                 {config.depot ? (
                   <>
@@ -157,37 +157,39 @@ export default function Configuracion() {
             </div>
 
             <div style={{ marginTop: '24px' }}>
-              <h3 style={{ fontSize: '18px', color: 'white', marginBottom: '8px' }}>Teléfonos de Emergencia</h3>
+              <h3 style={{ fontSize: '18px', color: 'var(--texto)', marginBottom: '8px' }}>Teléfonos de Emergencia</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Estos números se enviarán a los conductores en caso de reportar contingencias crudas.
               </p>
             </div>
 
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '12px', border: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div style={{ background: 'var(--superficie-2)', padding: '15px', borderRadius: '12px', border: '1px solid var(--borde)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px', display: 'block' }}>
-                  📞 Teléfono Grúa (Para Falla mecánica o Accidente)
+                  <i className="bi bi-telephone-fill" style={{ marginRight: '8px', color: 'var(--alerta)' }}></i>
+                  Teléfono Grúa (Para Falla mecánica o Accidente)
                 </label>
                 <input 
                   type="text" 
                   value={config.telefono_grua} 
                   onChange={e => setConfig({...config, telefono_grua: e.target.value})}
                   className="card" 
-                  style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid #444', color: 'white', padding: '10px' }}
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--borde-fuerte)', color: 'var(--texto)', padding: '10px' }}
                   placeholder="Ej: +57 300 000 0000"
                 />
               </div>
 
               <div>
                 <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px', display: 'block' }}>
-                  🚑 Teléfono Ambulancia (Para Operario lesionado)
+                  <i className="bi bi-heart-pulse-fill" style={{ marginRight: '8px', color: 'var(--peligro)' }}></i>
+                  Teléfono Ambulancia (Para Operario lesionado)
                 </label>
                 <input 
                   type="text" 
                   value={config.telefono_ambulancia} 
                   onChange={e => setConfig({...config, telefono_ambulancia: e.target.value})}
                   className="card" 
-                  style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid #444', color: 'white', padding: '10px' }}
+                  style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--borde-fuerte)', color: 'var(--texto)', padding: '10px' }}
                   placeholder="Ej: 123 o +57 312 000 0000"
                 />
               </div>
@@ -199,7 +201,7 @@ export default function Configuracion() {
             </div>
           </div>
 
-          <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #333' }}>
+          <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--borde)' }}>
             <MapContainer center={[2.9273, -75.2819]} zoom={13} style={{ height: '100%', width: '100%' }}>
               <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
               <MapClickHandler onLocationSelected={(loc) => setConfig({ depot: loc })} />
@@ -244,13 +246,13 @@ export default function Configuracion() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="card" style={{ width: '400px', border: '1px solid var(--color-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', color: 'white' }}>{editandoId ? 'Editar Turno' : 'Nuevo Turno'}</h3>
-              <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><i className="bi bi-x-lg"></i></button>
+              <h3 style={{ fontSize: '18px', color: 'var(--texto)' }}>{editandoId ? 'Editar Turno' : 'Nuevo Turno'}</h3>
+              <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', color: 'var(--texto)', cursor: 'pointer' }}><i className="bi bi-x-lg"></i></button>
             </div>
             <form onSubmit={handleSubmitJornada} style={{ display: 'grid', gap: '16px' }}>
-              <input type="text" required value={form.nombre} className="card" style={{ width:'100%', background:'var(--bg-secondary)', border:'none', color:'white', padding:'12px' }} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Nombre" />
-              <input type="time" required value={form.hora_inicio} className="card" style={{ width:'100%', background:'var(--bg-secondary)', border:'none', color:'white', padding:'12px' }} onChange={e => setForm({...form, hora_inicio: e.target.value})} />
-              <input type="time" required value={form.hora_limite_fin} className="card" style={{ width:'100%', background:'var(--bg-secondary)', border:'none', color:'white', padding:'12px' }} onChange={e => setForm({...form, hora_limite_fin: e.target.value})} />
+              <input type="text" required value={form.nombre} className="card" style={{ width:'100%', background:'var(--bg-secondary)', border:'none', color:'var(--texto)', padding:'12px' }} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Nombre" />
+              <input type="time" required value={form.hora_inicio} className="card" style={{ width:'100%', background:'var(--bg-secondary)', border:'none', color:'var(--texto)', padding:'12px' }} onChange={e => setForm({...form, hora_inicio: e.target.value})} />
+              <input type="time" required value={form.hora_limite_fin} className="card" style={{ width:'100%', background:'var(--bg-secondary)', border:'none', color:'var(--texto)', padding:'12px' }} onChange={e => setForm({...form, hora_limite_fin: e.target.value})} />
               <button type="submit" className="btn btn-primary" style={{ padding: '14px' }}>Guardar</button>
             </form>
           </div>
