@@ -3,7 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { formatearDiaLargo, formatearInstanteCorto } from '../utils/dateUtils';
 import { obtenerReportes, actualizarEstadoReporte, obtenerAsignaciones, getAssetUrl } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, Marker, Popup } from 'react-leaflet';
+import MapaOscuro from '../components/MapaOscuro';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -153,7 +154,7 @@ export default function Reportes() {
                 {/* Mapa con altura fija */}
                 <div style={{ height: '250px', minHeight: '250px', background: 'var(--fondo)', flexShrink: 0 }}>
                   <MapContainer center={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]} zoom={16} style={{ height: '100%' }}>
-                    <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                    <MapaOscuro />
                     <Marker position={[reporteSeleccionado.latitud, reporteSeleccionado.longitud]}>
                       <Popup>Ubicación del reporte</Popup>
                     </Marker>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { obtenerPuntosDescarga, crearPuntoDescarga, eliminarPuntoDescarga } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, useMapEvents } from 'react-leaflet';
+import MapaOscuro from '../components/MapaOscuro';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -140,7 +141,7 @@ export default function PuntosDescarga() {
 
         <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
           <MapContainer center={[2.9273, -75.2819]} zoom={13} style={{ height: '100%', width: '100%' }}>
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+            <MapaOscuro />
             <MapClickHandler onLocationSelected={setUbicacion} />
             
             {ubicacion && <Marker position={ubicacion} />}

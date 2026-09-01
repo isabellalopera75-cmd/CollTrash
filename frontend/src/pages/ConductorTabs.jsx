@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import API, { getAssetUrl } from '../services/api';
 import { token } from '../utils/tema';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Popup } from 'react-leaflet';
+import { MapContainer, Polyline, CircleMarker, Popup } from 'react-leaflet';
+import MapaOscuro from '../components/MapaOscuro';
 import { useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -36,7 +37,7 @@ export function TabRuta({ paradas, posicion, asignacion, reportesCiudadanos = []
       {/* MAPA */}
       <div style={{ flex: 1, minHeight: 0 }}>
         <MapContainer center={centro} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          <MapaOscuro />
           {posicion && <MapCenterer center={posicion} />}
           
           {trazadoTotal.length > 0 && (

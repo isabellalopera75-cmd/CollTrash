@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, Component } from 'react';
-import { MapContainer, TileLayer, Marker, CircleMarker, Popup } from 'react-leaflet';
+import { MapContainer, Marker, CircleMarker, Popup } from 'react-leaflet';
+import MapaOscuro from '../components/MapaOscuro';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import AdminLayout from '../components/Layout/AdminLayout';
@@ -247,7 +248,7 @@ function MonitoreoContent() {
         {/* Map Pane */}
         <div style={{ flex: 1, position: 'relative' }}>
           <MapContainer center={[2.9273, -75.2819]} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+            <MapaOscuro />
             {vehiculos.map(v => (
               <CircleMarker 
                 key={v.id} 

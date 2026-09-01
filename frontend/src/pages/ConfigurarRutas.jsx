@@ -5,7 +5,8 @@ import {
   obtenerVehiculos, obtenerJornadas, obtenerConductores, obtenerPuntosDescarga, obtenerConfig 
 } from '../services/api';
 import AdminLayout from '../components/Layout/AdminLayout';
-import { MapContainer, TileLayer, Polyline, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, Polyline, Marker, Popup, useMapEvents } from 'react-leaflet';
+import MapaOscuro from '../components/MapaOscuro';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -538,7 +539,7 @@ export default function ConfigurarRutas() {
                </div>
                <div style={{ flex: 1, background: 'var(--fondo)', position: 'relative' }}>
                   <MapContainer center={primerPuntoDelRecorrido || (depot && depot[0] ? depot : [2.9273, -75.2819])} zoom={14} style={{ height: '100%', width: '100%' }}>
-                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                     <MapaOscuro />
                      <MapClickHandler onPointAdded={(pt) => setPuntos([...puntos, pt])} enabled={true} />
                      
                      {depot && depot[0] && depot[1] && (
