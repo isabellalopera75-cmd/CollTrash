@@ -583,5 +583,59 @@ input:focus, select:focus, textarea:focus {
 }
 
 @media (max-width: 900px) {
+
   .filtros-estado { margin-left: 0; }
+}
+
+/* ============================================================================
+   MAPA - CONTROL DE CAPAS (LEAFLET)
+   ----------------------------------------------------------------------------
+   El control nativo es una caja blanca plana que rompía la estética del panel.
+   Ahora hereda el efecto de vidrio esmerilado y las variables de diseño.
+   ========================================================================== */
+.leaflet-control-layers {
+  background-color: color-mix(in oklch, var(--superficie), transparent 20%) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid var(--borde) !important;
+  border-radius: var(--r-lg) !important;
+  color: var(--texto) !important;
+  box-shadow: var(--sombra-3) !important;
+  padding: 8px 12px !important;
+  font-family: var(--f-texto) !important;
+}
+
+.leaflet-control-layers-list {
+  margin-bottom: 0 !important;
+}
+
+.leaflet-control-layers label {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  font-size: var(--t-sm) !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  padding: 6px 0 !important;
+  transition: color 0.2s ease !important;
+}
+
+.leaflet-control-layers label:hover {
+  color: var(--marca-hover) !important;
+}
+
+.leaflet-control-layers-selector {
+  margin: 0 !important;
+  accent-color: var(--marca) !important;
+  cursor: pointer !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.leaflet-control-layers-expanded {
+  padding: 10px 16px !important;
+}
+
+/* El botón que aparece cuando el control está colapsado */
+.leaflet-control-layers-toggle {
+  border-radius: var(--r-lg) !important;
 }
